@@ -1,0 +1,174 @@
+{% extends 'valorizador/base.html' %}
+{% load static format_tags %}
+
+{% block title %}{% if editing %}Editar curvas{% else %}Nuevo conjunto de curvas{% endif %}{% endblock %}
+
+{% block content %}
+<div class="page-head">
+    <div>
+        <p class="breadcrumb"><a href="{% url 'curvas_list' %}">Curvas</a> / {% if editing %}Editar{% else %}Nuevo{% endif %}</p>
+        <h1>{% if editing %}Editar «{{ conjunto.label }}»{% else %}Nuevo conjunto de curvas{% endif %}</h1>
+        <p class="sub">La curva forward se carga como <strong>outright</strong> (nivel del tipo de cambio a plazo); la de descuento, como <strong>tasa cero anual en porcentaje</strong>.</p>
+    </div>
+    <div class="actions">
+        <a href="{% url 'curvas_list' %}" class="btn secondary">Volver</a>
+    </div>
+</div>
+
+<form method="post" id="curvas-form" novalidate>
+    {% csrf_token %}
+
+    {% if form.non_field_errors %}
+    <div class="alert error">
+        <div class="txt">
+            <strong>Revisa lo siguiente</strong>
+            <ul>{% for e in form.non_field_errors %}<li>{{ e }}</li>{% endfor %}</ul>
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="card">
+        <h2>Datos del conjunto</h2>
+        <div class="form-grid">
+            {% for field in form %}
+            <div class="field">
+                <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+                {{ field }}
+                {% if field.help_text %}<span class="help">{{ field.help_text }}</span>{% endif %}
+                {% if field.errors %}
+                <ul class="errors">{% for e in field.errors %}<li>{{ e }}</li>{% endfor %}</ul>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-head">
+            <h2>Nodos de curva</h2>
+            <span class="muted small">Escribe a mano, pega desde Excel o importa un archivo.</span>
+        </div>
+
+        <div id="curve-editor" data-import-url="{% url 'curvas_import_points' %}">
+            {# Si el formulario vuelve con errores, conservamos los nodos que venían en el POST. #}
+            <input type="hidden" name="fwd_points" id="hidden-forward"
+                   value="{% firstof request.POST.fwd_points fwd_points_json %}">
+            <input type="hidden" name="desc_points" id="hidden-descuento"
+                   value="{% firstof request.POST.desc_points desc_points_json %}">
+
+            <div class="curve-editor">
+                <section>
+                    <div class="card-head">
+                        <h3>Curva forward USD/CLP</h3>
+                        <span class="muted tiny" data-count="forward">0 nodos válidos</span>
+                    </div>
+                    <p class="muted tiny" style="margin-bottom:8px">Curva <code>FWDUSDCLP</code> · unidad: pesos por dólar (outright)</p>
+
+                    <div id="avisos-forward"></div>
+
+                    <div class="node-table-wrap">
+                        <table class="node-table">
+                            <thead>
+                                <tr>
+                                    <th scope="col">Plazo (días)</th>
+                                    <th scope="col">Outright</th>
+                                    <th scope="col" class="act"><span class="hidden">Quitar</span></th>
+                                </tr>
+                            </thead>
+                            <tbody id="tbody-forward"></tbody>
+                        </table>
+                    </div>
+
+                    <div class="row" style="margin-top:10px">
+                        <button type="button" class="btn secondary sm" data-agregar="forward">+ Agregar fila</button>
+                        <button type="button" class="btn ghost sm" data-vaciar="forward">Vaciar</button>
+                    </div>
+
+                    <div class="field" style="margin-top:14px">
+                        <label for="paste-forward">Pegar desde el portapapeles</label>
+                        <textarea id="paste-forward" class="paste-zone"
+                                  placeholder="Dos columnas separadas por tabulación:&#10;30&#9;892,06&#10;90&#9;891,80"></textarea>
+                        <span class="help">Copia el rango desde Excel (plazo en días y valor) y pégalo aquí.</span>
+                        <button type="button" class="btn secondary sm" style="margin-top:8px" data-pegar-aplicar="forward">Aplicar pegado</button>
+                    </div>
+
+                    <div class="field">
+                        <label for="file-forward">Importar desde archivo</label>
+                        <input type="file" id="file-forward" data-import-file="forward"
+                               accept=".csv,.txt,.xlsx,.xlsm,.xls">
+                        <label class="row tiny" style="margin-top:6px; gap:6px">
+                            <input type="checkbox" data-import-replace="forward" checked>
+                            Reemplazar los nodos actuales
+                        </label>
+                        <span class="help" data-import-status="forward"></span>
+                    </div>
+                </section>
+
+                <section>
+                    <div class="card-head">
+                        <h3>Curva de descuento CLP</h3>
+                        <span class="muted tiny" data-count="descuento">0 nodos válidos</span>
+                    </div>
+                    <p class="muted tiny" style="margin-bottom:8px">Curva <code>CLP423</code> · unidad: tasa cero anual en % (por ejemplo 3,78)</p>
+
+                    <div id="avisos-descuento"></div>
+
+                    <div class="node-table-wrap">
+                        <table class="node-table">
+                            <thead>
+                                <tr>
+                                    <th scope="col">Plazo (días)</th>
+                                    <th scope="col">Tasa (%)</th>
+                                    <th scope="col" class="act"><span class="hidden">Quitar</span></th>
+                                </tr>
+                            </thead>
+                            <tbody id="tbody-descuento"></tbody>
+                        </table>
+                    </div>
+
+                    <div class="row" style="margin-top:10px">
+                        <button type="button" class="btn secondary sm" data-agregar="descuento">+ Agregar fila</button>
+                        <button type="button" class="btn ghost sm" data-vaciar="descuento">Vaciar</button>
+                    </div>
+
+                    <div class="field" style="margin-top:14px">
+                        <label for="paste-descuento">Pegar desde el portapapeles</label>
+                        <textarea id="paste-descuento" class="paste-zone"
+                                  placeholder="Dos columnas separadas por tabulación:&#10;92&#9;3,48231&#10;183&#9;3,61177"></textarea>
+                        <span class="help">Copia el rango desde Excel (plazo en días y tasa) y pégalo aquí.</span>
+                        <button type="button" class="btn secondary sm" style="margin-top:8px" data-pegar-aplicar="descuento">Aplicar pegado</button>
+                    </div>
+
+                    <div class="field">
+                        <label for="file-descuento">Importar desde archivo</label>
+                        <input type="file" id="file-descuento" data-import-file="descuento"
+                               accept=".csv,.txt,.xlsx,.xlsm,.xls">
+                        <label class="row tiny" style="margin-top:6px; gap:6px">
+                            <input type="checkbox" data-import-replace="descuento" checked>
+                            Reemplazar los nodos actuales
+                        </label>
+                        <span class="help" data-import-status="descuento"></span>
+                    </div>
+                </section>
+            </div>
+
+            <div class="chart-card" style="margin-top:18px">
+                <h3>Vista previa</h3>
+                <p class="sub">Se actualiza a medida que editas los nodos.</p>
+                <div class="chart-box tall">
+                    <canvas id="chartPreview" aria-label="Vista previa de las curvas" role="img"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row end">
+        <a href="{% url 'curvas_list' %}" class="btn secondary">Cancelar</a>
+        <button type="submit" class="btn">{% if editing %}Guardar cambios{% else %}Crear conjunto{% endif %}</button>
+    </div>
+</form>
+{% endblock %}
+
+{% block scripts %}
+<script src="{% static 'valorizador/js/curvas.js' %}" defer></script>
+{% endblock %}

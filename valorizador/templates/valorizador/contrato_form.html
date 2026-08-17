@@ -1,0 +1,62 @@
+{% extends 'valorizador/base.html' %}
+
+{% block title %}{% if editing %}Editar contrato{% else %}Nuevo contrato{% endif %}{% endblock %}
+
+{% block content %}
+<div class="page-head">
+    <div>
+        <p class="breadcrumb"><a href="{% url 'contratos_list' %}">Contratos</a> / {% if editing %}Editar{% else %}Nuevo{% endif %}</p>
+        <h1>{% if editing %}Editar contrato {{ contrato.folio|default:"" }}{% else %}Nuevo contrato forward{% endif %}</h1>
+        <p class="sub">El <strong>spot al inicio</strong> es obligatorio: sin él no se puede separar el resultado en componente spot y puntos forward.</p>
+    </div>
+    <div class="actions">
+        <a href="{% url 'contratos_list' %}" class="btn secondary">Volver</a>
+    </div>
+</div>
+
+<form method="post" novalidate>
+    {% csrf_token %}
+
+    {% if form.non_field_errors %}
+    <div class="alert error">
+        <div class="txt">
+            <strong>Revisa lo siguiente</strong>
+            <ul>{% for e in form.non_field_errors %}<li>{{ e }}</li>{% endfor %}</ul>
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="card">
+        <h2>Datos del contrato</h2>
+        <div class="form-grid">
+            {% for field in form %}
+                {% if field.field.widget.input_type == 'checkbox' %}
+                <div class="check-field">
+                    {{ field }}
+                    <div>
+                        <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+                        {% if field.help_text %}<span class="help">{{ field.help_text }}</span>{% endif %}
+                        {% if field.errors %}<ul class="errors">{% for e in field.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+                    </div>
+                </div>
+                {% else %}
+                <div class="field">
+                    <label for="{{ field.id_for_label }}">
+                        {{ field.label }}{% if field.field.required %} <span class="neg" aria-hidden="true">*</span>{% endif %}
+                    </label>
+                    {{ field }}
+                    {% if field.help_text %}<span class="help">{{ field.help_text }}</span>{% endif %}
+                    {% if field.errors %}<ul class="errors">{% for e in field.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+                </div>
+                {% endif %}
+            {% endfor %}
+        </div>
+        <p class="muted tiny">Los campos marcados con <span class="neg">*</span> son obligatorios.</p>
+    </div>
+
+    <div class="row end">
+        <a href="{% url 'contratos_list' %}" class="btn secondary">Cancelar</a>
+        <button type="submit" class="btn">{% if editing %}Guardar cambios{% else %}Agregar contrato{% endif %}</button>
+    </div>
+</form>
+{% endblock %}

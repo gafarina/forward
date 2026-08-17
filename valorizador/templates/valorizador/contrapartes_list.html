@@ -1,0 +1,97 @@
+{% extends 'valorizador/base.html' %}
+{% load format_tags %}
+
+{% block title %}Contrapartes{% endblock %}
+
+{% block content %}
+<div class="page-head">
+    <div>
+        <h1>Contrapartes</h1>
+        <p class="sub">Parámetros de crédito por contraparte. Reemplazan el spread único que aplicaba a todos por igual.</p>
+    </div>
+</div>
+
+<div class="grid cols-2" style="grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); align-items:start">
+    <div class="card flush">
+        <div class="card-head">
+            <h2>Fichas registradas</h2>
+            <span class="muted small">{{ contrapartes|length }} contraparte{{ contrapartes|length|pluralize:"s" }}</span>
+        </div>
+        {% if contrapartes %}
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th scope="col">Nombre</th>
+                        <th scope="col" class="num">Spread (bp)</th>
+                        <th scope="col" class="num">Recuperación</th>
+                        <th scope="col">Neteo ISDA</th>
+                        <th scope="col" class="num">Contratos</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for c in contrapartes %}
+                    <tr>
+                        <td><strong>{{ c.nombre }}</strong></td>
+                        <td class="num">{{ c.spread_bp|formato_numero:2 }}</td>
+                        <td class="num">{{ c.recovery|formato_numero:4 }}</td>
+                        <td>
+                            {% if c.tiene_isda_neteo %}
+                            <span class="pill ok">Con neteo</span>
+                            {% else %}
+                            <span class="pill neutral">Sin neteo</span>
+                            {% endif %}
+                        </td>
+                        <td class="num">{{ c.contratos.count }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="empty">
+            <span class="ico" aria-hidden="true">⚖</span>
+            <h3>Sin contrapartes registradas</h3>
+            <p>Registra una ficha para calcular el CVA con el spread y la recuperación propios de cada banco.</p>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="card">
+        <h2>Nueva contraparte</h2>
+        <p class="muted small" style="margin-bottom:14px">La tasa de recuperación va entre 0 y 1 (por ejemplo 0,40).</p>
+
+        <form method="post" novalidate>
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="alert error">
+                <div class="txt"><ul>{% for e in form.non_field_errors %}<li>{{ e }}</li>{% endfor %}</ul></div>
+            </div>
+            {% endif %}
+
+            {% for field in form %}
+                {% if field.field.widget.input_type == 'checkbox' %}
+                <div class="check-field">
+                    {{ field }}
+                    <div>
+                        <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+                        {% if field.help_text %}<span class="help">{{ field.help_text }}</span>{% endif %}
+                        {% if field.errors %}<ul class="errors">{% for e in field.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+                    </div>
+                </div>
+                {% else %}
+                <div class="field">
+                    <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+                    {{ field }}
+                    {% if field.help_text %}<span class="help">{{ field.help_text }}</span>{% endif %}
+                    {% if field.errors %}<ul class="errors">{% for e in field.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+                </div>
+                {% endif %}
+            {% endfor %}
+
+            <button type="submit" class="btn block">Guardar contraparte</button>
+        </form>
+    </div>
+</div>
+{% endblock %}

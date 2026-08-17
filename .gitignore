@@ -1,0 +1,39 @@
+# Credenciales — lo que faltaba en el repositorio original
+.env
+*.pem
+*.key
+
+# Base de datos local
+db.sqlite3
+db.sqlite3-journal
+*.sqlite3
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# Django
+staticfiles/
+media/
+*.log
+
+# Herramientas
+.pytest_cache/
+.coverage
+htmlcov/
+.ruff_cache/
+.mypy_cache/
+
+# Editores / SO
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+~$*.xls*
+
+# Libro generado por scripts/build_excel_model.py
+/Valorizador_Forwards.xlsx

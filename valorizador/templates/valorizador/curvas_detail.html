@@ -1,0 +1,217 @@
+{% extends 'valorizador/base.html' %}
+{% load format_tags %}
+
+{% block title %}{{ conjunto.label }}{% endblock %}
+
+{% block content %}
+<div class="page-head">
+    <div>
+        <p class="breadcrumb"><a href="{% url 'curvas_list' %}">Curvas</a> / Detalle</p>
+        <h1>{{ conjunto.label }}
+            {% if conjunto.is_active %}<span class="pill ok">Activo</span>{% endif %}
+        </h1>
+        <p class="sub">
+            Fecha de valorización {{ conjunto.valuation_date|date:"d/m/Y" }} ·
+            spot {{ conjunto.spot_usdclp|formato_precio }} ·
+            fuente {{ conjunto.source }}
+        </p>
+    </div>
+    <div class="actions">
+        <a href="{% url 'curvas_edit' conjunto.pk %}" class="btn secondary">Editar</a>
+        <form method="post" action="{% url 'curvas_duplicate' conjunto.pk %}" class="inline-form"
+              onsubmit="return confirm('¿Crear una copia de «{{ conjunto.label|escapejs }}» con todos sus nodos?');">
+            {% csrf_token %}
+            <button type="submit" class="btn secondary">Duplicar</button>
+        </form>
+        {% if not conjunto.is_active %}
+        <form method="post" action="{% url 'curvas_activate' conjunto.pk %}" class="inline-form"
+              onsubmit="return confirm('¿Activar este conjunto? El conjunto activo actual quedará inactivo.');">
+            {% csrf_token %}
+            <button type="submit" class="btn">Activar</button>
+        </form>
+        {% endif %}
+        <form method="post" action="{% url 'curvas_delete' conjunto.pk %}" class="inline-form"
+              onsubmit="return confirm('¿Eliminar «{{ conjunto.label|escapejs }}» y sus {{ conjunto.n_puntos }} nodos? Esta acción no se puede deshacer.');">
+            {% csrf_token %}
+            <button type="submit" class="btn danger">Eliminar</button>
+        </form>
+    </div>
+</div>
+
+<div class="grid cols-4">
+    <div class="kpi">
+        <span class="label">Nodos forward</span>
+        <span class="value">{{ fwd_count }}</span>
+        <span class="hint">Curva FWDUSDCLP</span>
+    </div>
+    <div class="kpi">
+        <span class="label">Rango forward</span>
+        <span class="value sm">{{ fwd_min|formato_precio }} – {{ fwd_max|formato_precio }}</span>
+        <span class="hint">Amplitud {{ fwd_spread|formato_numero:4 }}</span>
+    </div>
+    <div class="kpi">
+        <span class="label">Nodos descuento</span>
+        <span class="value">{{ desc_count }}</span>
+        <span class="hint">Curva CLP423</span>
+    </div>
+    <div class="kpi">
+        <span class="label">Rango descuento</span>
+        <span class="value sm">{{ desc_min|formato_tasa:2 }} – {{ desc_max|formato_tasa:2 }}</span>
+        <span class="hint">Amplitud {{ desc_spread|formato_numero:4 }} pp</span>
+    </div>
+</div>
+
+<div class="grid cols-2">
+    <div class="chart-card">
+        <h3>Curva forward USD/CLP</h3>
+        <p class="sub">Outright por plazo</p>
+        <div class="chart-box"><canvas id="chartFwd" aria-label="Curva forward" role="img"></canvas></div>
+    </div>
+    <div class="chart-card">
+        <h3>Curva de descuento CLP</h3>
+        <p class="sub">Tasa cero anual por plazo</p>
+        <div class="chart-box"><canvas id="chartDesc" aria-label="Curva de descuento" role="img"></canvas></div>
+    </div>
+</div>
+
+<div class="chart-card" style="margin-bottom:18px">
+    <h3>Puntos forward implícitos</h3>
+    <p class="sub">Outright menos el spot del conjunto ({{ conjunto.spot_usdclp|formato_precio }}). Útil para detectar curvas cargadas en la unidad equivocada.</p>
+    <div class="chart-box"><canvas id="chartPuntos" aria-label="Puntos forward implícitos" role="img"></canvas></div>
+</div>
+
+<div class="card flush">
+    <div class="card-head">
+        <h2>Nodos cargados</h2>
+        <span class="muted small">{{ conjunto.n_puntos }} nodos en total</span>
+    </div>
+    {% if conjunto.puntos.all %}
+    <div class="table-wrap">
+        <table class="dense">
+            <thead>
+                <tr>
+                    <th scope="col">Curva</th>
+                    <th scope="col">Descripción</th>
+                    <th scope="col" class="num">Plazo (días)</th>
+                    <th scope="col" class="num">Valor</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for p in conjunto.puntos.all %}
+                <tr>
+                    <td class="mono">{{ p.nombre }}</td>
+                    <td class="muted">{{ p.get_nombre_display }}</td>
+                    <td class="num">{{ p.tenor_days }}</td>
+                    <td class="num">{{ p.value|formato_numero:6 }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="empty">
+        <span class="ico" aria-hidden="true">◠</span>
+        <h3>Este conjunto no tiene nodos</h3>
+        <p>No se podrá valorizar con él hasta que cargues al menos un nodo por curva.</p>
+        <a href="{% url 'curvas_edit' conjunto.pk %}" class="btn">Cargar nodos</a>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+    var fwd = {{ fwd_json|safe }};
+    var desc = {{ desc_json|safe }};
+    var puntos = {{ puntos_fwd_json|safe }};
+    var spot = {{ spot_json|safe }};
+
+    function linea(id, datos, color, relleno, sufijo, decimales, titulo) {
+        var el = document.getElementById(id);
+        if (!el) return;
+        if (!datos.length) {
+            el.closest('.chart-box').innerHTML =
+                '<div class="empty"><span class="ico" aria-hidden="true">◠</span>' +
+                '<p>Sin nodos cargados para esta curva.</p></div>';
+            return;
+        }
+        new Chart(el, {
+            type: 'line',
+            data: {
+                labels: datos.map(function (p) { return p.tenor_days; }),
+                datasets: [{
+                    label: titulo,
+                    data: datos.map(function (p) { return p.value; }),
+                    borderColor: color,
+                    backgroundColor: relleno,
+                    fill: true,
+                    tension: .25,
+                    pointRadius: 3,
+                    pointBackgroundColor: color
+                }]
+            },
+            options: App.chartOpts({
+                scales: {
+                    x: { title: { display: true, text: 'Plazo (días)', color: App.Tema.tick, font: { size: 10 } } },
+                    y: { ticks: { callback: function (v) { return App.num(v, decimales) + sufijo; } } }
+                },
+                plugins: {
+                    tooltip: {
+                        callbacks: {
+                            title: function (i) { return i[0].label + ' días'; },
+                            label: function (ctx) { return titulo + ': ' + App.num(ctx.parsed.y, decimales) + sufijo; }
+                        }
+                    }
+                }
+            })
+        });
+    }
+
+    linea('chartFwd', fwd, App.Tema.accent, 'rgba(79,45,127,.12)', '', 4, 'Outright');
+    linea('chartDesc', desc, App.Tema.info, 'rgba(0,164,179,.12)', '%', 4, 'Tasa cero');
+
+    var elP = document.getElementById('chartPuntos');
+    if (elP) {
+        if (!puntos.length) {
+            elP.closest('.chart-box').innerHTML =
+                '<div class="empty"><span class="ico" aria-hidden="true">◠</span>' +
+                '<p>Sin curva forward cargada.</p></div>';
+        } else {
+            new Chart(elP, {
+                type: 'bar',
+                data: {
+                    labels: puntos.map(function (p) { return p.tenor_days; }),
+                    datasets: [{
+                        label: 'Puntos forward',
+                        data: puntos.map(function (p) { return p.value; }),
+                        backgroundColor: puntos.map(function (p) {
+                            return p.value >= 0 ? 'rgba(16,185,129,.7)' : 'rgba(206,44,44,.7)';
+                        }),
+                        borderWidth: 0,
+                        borderRadius: 3
+                    }]
+                },
+                options: App.chartOpts({
+                    scales: {
+                        x: { title: { display: true, text: 'Plazo (días)', color: App.Tema.tick, font: { size: 10 } } },
+                        y: { ticks: { callback: function (v) { return App.num(v, 2); } } }
+                    },
+                    plugins: {
+                        tooltip: {
+                            callbacks: {
+                                title: function (i) { return i[0].label + ' días'; },
+                                label: function (ctx) {
+                                    return 'Outright ' + App.num(spot + ctx.parsed.y, 4) +
+                                           ' · puntos ' + App.num(ctx.parsed.y, 4);
+                                }
+                            }
+                        }
+                    }
+                })
+            });
+        }
+    }
+})();
+</script>
+{% endblock %}

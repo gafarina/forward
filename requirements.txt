@@ -1,0 +1,9 @@
+Django>=5.0,<5.2
+openpyxl>=3.1.0
+whitenoise>=6.6.0
+gunicorn>=21.2.0
+python-dotenv>=1.0.0
+
+# Asistente opcional. Si no se instala, la app funciona igual: el endpoint
+# devuelve 503 y el widget no se muestra.
+google-generativeai>=0.8.0

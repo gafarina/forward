@@ -1,0 +1,114 @@
+{% extends 'valorizador/base.html' %}
+{% load format_tags %}
+
+{% block title %}Cargar libro{% endblock %}
+
+{% block content %}
+<div class="page-head">
+    <div>
+        <h1>Cargar libro Excel</h1>
+        <p class="sub">Lee la calculadora de forwards (.xlsm) y crea un conjunto de curvas activo más los contratos del libro.</p>
+    </div>
+    <div class="actions">
+        <form method="post" action="{% url 'datos_ejemplo' %}">
+            {% csrf_token %}
+            <button type="submit" class="btn secondary">Cargar datos de ejemplo</button>
+        </form>
+        <a href="{% url 'curvas_list' %}" class="btn secondary">Ver curvas</a>
+    </div>
+</div>
+
+<div class="grid cols-2" style="grid-template-columns: minmax(0,1fr) minmax(0,1fr); align-items:start">
+    <div class="card">
+        <h2>Archivo del libro</h2>
+        <form method="post" enctype="multipart/form-data" novalidate>
+            {% csrf_token %}
+
+            <div class="field">
+                <label for="{{ form.archivo.id_for_label }}">{{ form.archivo.label }}</label>
+                {{ form.archivo }}
+                {% if form.archivo.errors %}
+                <ul class="errors">{% for e in form.archivo.errors %}<li>{{ e }}</li>{% endfor %}</ul>
+                {% endif %}
+                <span class="help">Formatos aceptados: .xlsm, .xlsx, .xls, .csv, .txt</span>
+            </div>
+
+            <div class="field">
+                <label for="cartera_id">Asignar los contratos a la cartera</label>
+                <select name="cartera_id" id="cartera_id" class="select">
+                    <option value="">Sin cartera</option>
+                    {% for c in carteras %}
+                    <option value="{{ c.pk }}">{{ c.nombre }}</option>
+                    {% endfor %}
+                </select>
+                <span class="help">Sólo se crean los contratos cuyo folio aún no exista en tu cuenta.</span>
+            </div>
+
+            <button type="submit" class="btn">Procesar libro</button>
+        </form>
+    </div>
+
+    <div class="card">
+        <h2>Qué hace esta carga</h2>
+        <ul class="small muted" style="padding-left:18px; display:flex; flex-direction:column; gap:6px">
+            <li>Detecta la fecha de valorización y el spot USD/CLP del libro.</li>
+            <li>Crea un <strong>conjunto de curvas nuevo y activo</strong>; el conjunto activo anterior queda inactivo.</li>
+            <li>Importa los nodos de todas las curvas reconocidas (forward y descuento).</li>
+            <li>Agrega los contratos del libro, <strong>omitiendo los folios que ya tengas cargados</strong>.</li>
+            <li>Muestra los avisos de lectura en lugar de descartar filas en silencio.</li>
+        </ul>
+        <div class="callout" style="margin-top:14px">
+            Si el libro no trae curvas utilizables, no se crea nada y se te informa el motivo.
+        </div>
+    </div>
+</div>
+
+{% if resumen %}
+<div class="card">
+    <div class="card-head">
+        <h2>Resumen de la carga</h2>
+        {% if resumen.ok %}
+        <span class="pill ok">Procesado</span>
+        {% else %}
+        <span class="pill warn">No se pudo procesar</span>
+        {% endif %}
+    </div>
+
+    {% if resumen.ok %}
+    <div class="grid cols-5" style="margin-bottom:0">
+        <div class="kpi">
+            <span class="label">Fecha detectada</span>
+            <span class="value sm">{{ resumen.fecha|date:"d/m/Y" }}</span>
+        </div>
+        <div class="kpi">
+            <span class="label">Spot USD/CLP</span>
+            <span class="value sm">{{ resumen.spot|formato_precio }}</span>
+        </div>
+        <div class="kpi">
+            <span class="label">Curvas detectadas</span>
+            <span class="value sm">{{ resumen.curvas|length }}</span>
+            <span class="hint">{% for c in resumen.curvas %}{{ c }}{% if not forloop.last %}, {% endif %}{% endfor %}</span>
+        </div>
+        <div class="kpi">
+            <span class="label">Nodos cargados</span>
+            <span class="value sm">{{ resumen.n_puntos }}</span>
+        </div>
+        <div class="kpi">
+            <span class="label">Contratos nuevos</span>
+            <span class="value sm">{{ resumen.n_contratos }}</span>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if resumen.avisos %}
+    <div class="alert warning" style="margin-top:16px">
+        <div class="txt">
+            <strong>{{ resumen.avisos|length }} aviso{{ resumen.avisos|length|pluralize:"s" }} de lectura</strong>
+            <ul>{% for a in resumen.avisos %}<li>{{ a }}</li>{% endfor %}</ul>
+        </div>
+        <button type="button" class="close" data-dismiss aria-label="Cerrar aviso">&times;</button>
+    </div>
+    {% endif %}
+</div>
+{% endif %}
+{% endblock %}

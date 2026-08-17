@@ -1,0 +1,38 @@
+{% extends 'accounts/base_auth.html' %}
+
+{% block title %}Iniciar sesión{% endblock %}
+
+{% block content %}
+<h1 style="margin-bottom:6px">Iniciar sesión</h1>
+<p class="muted small" style="margin-bottom:20px">Accede con tu usuario para ver tus carteras, curvas y valorizaciones.</p>
+
+<form method="post" novalidate>
+    {% csrf_token %}
+
+    {% if form.non_field_errors %}
+    <ul class="errorlist">
+        {% for e in form.non_field_errors %}<li>{{ e }}</li>{% endfor %}
+    </ul>
+    {% endif %}
+
+    <div class="field">
+        <label for="{{ form.username.id_for_label }}">Usuario</label>
+        {{ form.username }}
+        {% if form.username.errors %}<ul class="errors">{% for e in form.username.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+    </div>
+
+    <div class="field">
+        <label for="{{ form.password.id_for_label }}">Contraseña</label>
+        {{ form.password }}
+        {% if form.password.errors %}<ul class="errors">{% for e in form.password.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+    </div>
+
+    {% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}
+
+    <button type="submit" class="btn block">Entrar</button>
+</form>
+
+<p class="auth-foot">
+    ¿No tienes cuenta? <a href="{% url 'accounts:register' %}">Crear una cuenta</a>
+</p>
+{% endblock %}

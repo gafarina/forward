@@ -1,0 +1,72 @@
+{% extends 'valorizador/base.html' %}
+{% load format_tags %}
+
+{% block title %}Carteras{% endblock %}
+
+{% block content %}
+<div class="page-head">
+    <div>
+        <h1>Carteras</h1>
+        <p class="sub">Agrupan contratos para valorizar y reportar por separado.</p>
+    </div>
+    <div class="actions">
+        <a href="{% url 'cartera_create' %}" class="btn">Nueva cartera</a>
+    </div>
+</div>
+
+<div class="card flush">
+    {% if carteras %}
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th scope="col">Nombre</th>
+                    <th scope="col">Descripción</th>
+                    <th scope="col" class="num">Contratos vigentes</th>
+                    <th scope="col">Nocional por moneda</th>
+                    <th scope="col">Creada</th>
+                    <th scope="col" class="text-center">Acciones</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for c in carteras %}
+                <tr>
+                    <td><strong>{{ c.nombre }}</strong></td>
+                    <td class="muted">{{ c.descripcion|default:"—"|truncatechars:90 }}</td>
+                    <td class="num">{{ c.n_contratos }}</td>
+                    <td class="num">
+                        {% for moneda, monto in c.notional_por_moneda.items %}
+                        <div>{{ monto|formato_numero:0 }} {{ moneda }}</div>
+                        {% empty %}
+                        <span class="muted">—</span>
+                        {% endfor %}
+                    </td>
+                    <td class="muted nowrap">{{ c.created_at|date:"d/m/Y" }}</td>
+                    <td>
+                        <div class="row" style="justify-content:center; gap:6px; flex-wrap:nowrap">
+                            <a href="{% url 'contratos_list' %}?cartera={{ c.pk }}" class="btn-icon"
+                               aria-label="Ver contratos de {{ c.nombre }}" title="Ver contratos">≣</a>
+                            <a href="{% url 'dashboard' %}?cartera_id={{ c.pk }}" class="btn-icon"
+                               aria-label="Ver el panel de {{ c.nombre }}" title="Ver en el panel">◧</a>
+                            <form method="post" action="{% url 'cartera_delete' c.pk %}" class="inline-form"
+                                  onsubmit="return confirm('¿Eliminar la cartera «{{ c.nombre|escapejs }}»? Sus {{ c.n_contratos }} contratos vigentes quedarán sin cartera asignada, pero no se borran.');">
+                                {% csrf_token %}
+                                <button type="submit" class="btn-icon danger" aria-label="Eliminar {{ c.nombre }}" title="Eliminar">🗑</button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="empty">
+        <span class="ico" aria-hidden="true">◱</span>
+        <h3>Aún no tienes carteras</h3>
+        <p>Crea una cartera para separar tus contratos por unidad de negocio, cliente o estrategia.</p>
+        <a href="{% url 'cartera_create' %}" class="btn">Crear la primera cartera</a>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

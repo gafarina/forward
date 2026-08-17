@@ -1,0 +1,20 @@
+{% comment %}Renderiza un campo de formulario. Uso: {% include 'valorizador/_campo.html' with campo=form.mi_campo %}{% endcomment %}
+{% if campo.field.widget.input_type == 'checkbox' %}
+<div class="check-field">
+    {{ campo }}
+    <div>
+        <label for="{{ campo.id_for_label }}">{{ campo.label }}</label>
+        {% if campo.help_text %}<span class="help">{{ campo.help_text }}</span>{% endif %}
+        {% if campo.errors %}<ul class="errors">{% for e in campo.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+    </div>
+</div>
+{% else %}
+<div class="field">
+    <label for="{{ campo.id_for_label }}">
+        {{ campo.label }}{% if campo.field.required %} <span class="neg" aria-hidden="true">*</span>{% endif %}
+    </label>
+    {{ campo }}
+    {% if campo.help_text %}<span class="help">{{ campo.help_text }}</span>{% endif %}
+    {% if campo.errors %}<ul class="errors">{% for e in campo.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+</div>
+{% endif %}

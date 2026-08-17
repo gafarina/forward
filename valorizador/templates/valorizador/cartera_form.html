@@ -1,0 +1,44 @@
+{% extends 'valorizador/base.html' %}
+
+{% block title %}Nueva cartera{% endblock %}
+
+{% block content %}
+<div class="page-head">
+    <div>
+        <p class="breadcrumb"><a href="{% url 'carteras_list' %}">Carteras</a> / Nueva</p>
+        <h1>Nueva cartera</h1>
+        <p class="sub">El nombre debe ser único dentro de tu cuenta.</p>
+    </div>
+    <div class="actions">
+        <a href="{% url 'carteras_list' %}" class="btn secondary">Volver</a>
+    </div>
+</div>
+
+<form method="post" novalidate style="max-width:640px">
+    {% csrf_token %}
+
+    {% if form.non_field_errors %}
+    <div class="alert error">
+        <div class="txt"><ul>{% for e in form.non_field_errors %}<li>{{ e }}</li>{% endfor %}</ul></div>
+    </div>
+    {% endif %}
+
+    <div class="card">
+        {% for field in form %}
+        <div class="field">
+            <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+            {{ field }}
+            {% if field.help_text %}<span class="help">{{ field.help_text }}</span>{% endif %}
+            {% if field.errors %}
+            <ul class="errors">{% for e in field.errors %}<li>{{ e }}</li>{% endfor %}</ul>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+
+    <div class="row end">
+        <a href="{% url 'carteras_list' %}" class="btn secondary">Cancelar</a>
+        <button type="submit" class="btn">Crear cartera</button>
+    </div>
+</form>
+{% endblock %}

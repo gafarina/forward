@@ -1,0 +1,178 @@
+{% load static %}<!DOCTYPE html>
+<html lang="es-CL">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light dark">
+    <title>{% block title %}Panel{% endblock %} · Valorizador de Forwards</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{% static 'valorizador/css/style.css' %}">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+    <script src="{% static 'valorizador/js/app.js' %}" defer></script>
+</head>
+<body>
+<a class="skip-link" href="#contenido">Saltar al contenido</a>
+
+{% url 'dashboard' as url_dashboard %}
+{% with urlname=request.resolver_match.url_name %}
+<aside class="sidebar">
+    <div class="sidebar-brand">
+        <a class="logo" href="{{ url_dashboard }}">
+            <span class="mark" aria-hidden="true">₣</span>
+            <span>Valorizador de Forwards
+                <span class="tag">v2 · USD/CLP</span>
+            </span>
+        </a>
+    </div>
+
+    <nav aria-label="Navegación principal">
+        <span class="nav-group">Análisis</span>
+        <a href="{% url 'dashboard' %}" {% if urlname == 'dashboard' %}class="active" aria-current="page"{% endif %}><span class="ico" aria-hidden="true">◧</span> Panel</a>
+        <a href="{% url 'valorizar' %}" {% if urlname == 'valorizar' %}class="active" aria-current="page"{% endif %}><span class="ico" aria-hidden="true">∑</span> Valorizar</a>
+        <a href="{% url 'valorizaciones_list' %}" {% if 'valorizacion' in urlname %}class="active" aria-current="page"{% endif %}><span class="ico" aria-hidden="true">▤</span> Valorizaciones</a>
+
+        <span class="nav-group">Datos</span>
+        <a href="{% url 'carteras_list' %}" {% if 'cartera' in urlname %}class="active" aria-current="page"{% endif %}><span class="ico" aria-hidden="true">◱</span> Carteras</a>
+        <a href="{% url 'curvas_list' %}" {% if 'curvas' in urlname %}class="active" aria-current="page"{% endif %}><span class="ico" aria-hidden="true">◠</span> Curvas</a>
+        <a href="{% url 'contratos_list' %}" {% if 'contrato' in urlname %}class="active" aria-current="page"{% endif %}><span class="ico" aria-hidden="true">≣</span> Contratos</a>
+        <a href="{% url 'contrapartes_list' %}" {% if 'contrapartes' in urlname %}class="active" aria-current="page"{% endif %}><span class="ico" aria-hidden="true">⚖</span> Contrapartes</a>
+        <a href="{% url 'upload' %}" {% if urlname == 'upload' %}class="active" aria-current="page"{% endif %}><span class="ico" aria-hidden="true">⬆</span> Cargar libro</a>
+    </nav>
+
+    <div class="sidebar-footer">
+        <div class="who">
+            <strong><a href="{% url 'accounts:profile' %}">{{ request.user.username }}</a></strong>
+            <span>Sesión iniciada</span>
+        </div>
+        <form method="post" action="{% url 'accounts:logout' %}">
+            {% csrf_token %}
+            <button type="submit" class="btn secondary sm">Salir</button>
+        </form>
+    </div>
+</aside>
+{% endwith %}
+
+<main class="content" id="contenido">
+    {% if messages %}
+    <div class="messages" role="status" aria-live="polite">
+        {% for message in messages %}
+        <div class="alert {{ message.tags|default:'info' }}">
+            <span class="txt">{{ message }}</span>
+            <button type="button" class="close" data-dismiss aria-label="Cerrar aviso">&times;</button>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    {% block content %}{% endblock %}
+</main>
+
+{% if ASSISTANT_ENABLED %}
+<div class="chatbot-widget" id="chatbot-widget">
+    <button id="chatbot-toggle" class="chatbot-toggle" aria-label="Abrir el asistente" aria-expanded="false">✦</button>
+    <div id="chatbot-container" class="chatbot-container hidden" role="dialog" aria-label="Asistente de metodología">
+        <div class="chatbot-header">
+            <h3>Asistente</h3>
+            <button id="chatbot-close" class="chatbot-close" aria-label="Cerrar el asistente">&times;</button>
+        </div>
+        <div id="chatbot-messages" class="chatbot-messages">
+            <div class="chat-msg bot-msg">Hola. Puedo explicarte la metodología de valorización (interpolación, convenciones de días, descuento, griegas, CVA) y comentar tu cartera. ¿En qué te ayudo?</div>
+        </div>
+        <form class="chatbot-input" id="chatbot-form">
+            <label class="hidden" for="chatbot-input-text">Mensaje</label>
+            <input type="text" id="chatbot-input-text" autocomplete="off" placeholder="Escribe tu consulta...">
+            <button type="submit" aria-label="Enviar mensaje">➤</button>
+        </form>
+    </div>
+</div>
+<script>
+(function () {
+    var chatUrl = "{% url 'api_chat' %}";
+    var historial = [];
+    var toggle = document.getElementById('chatbot-toggle');
+    var caja = document.getElementById('chatbot-container');
+    var cerrar = document.getElementById('chatbot-close');
+    var lista = document.getElementById('chatbot-messages');
+    var form = document.getElementById('chatbot-form');
+    var input = document.getElementById('chatbot-input-text');
+
+    toggle.addEventListener('click', function () {
+        caja.classList.remove('hidden');
+        toggle.style.display = 'none';
+        toggle.setAttribute('aria-expanded', 'true');
+        input.focus();
+    });
+    cerrar.addEventListener('click', function () {
+        caja.classList.add('hidden');
+        toggle.style.display = 'grid';
+        toggle.setAttribute('aria-expanded', 'false');
+        toggle.focus();
+    });
+
+    function agregar(clase, texto) {
+        var div = document.createElement('div');
+        div.className = 'chat-msg ' + clase;
+        div.textContent = texto;
+        lista.appendChild(div);
+        lista.scrollTop = lista.scrollHeight;
+        return div;
+    }
+
+    var MENSAJES = {
+        400: 'La consulta no se pudo interpretar. Intenta reformularla.',
+        401: 'Tu sesión expiró. Vuelve a iniciar sesión para seguir usando el asistente.',
+        403: 'Tu sesión expiró o la solicitud fue rechazada. Recarga la página e intenta otra vez.',
+        429: 'Alcanzaste el límite de consultas por hora. Intenta más tarde.',
+        502: 'El asistente no está disponible en este momento.',
+        503: 'El asistente no está configurado en este despliegue.'
+    };
+
+    form.addEventListener('submit', async function (ev) {
+        ev.preventDefault();
+        var texto = input.value.trim();
+        if (!texto) return;
+        input.value = '';
+        agregar('user-msg', texto);
+        var esperando = agregar('bot-msg typing-indicator', 'Escribiendo...');
+
+        try {
+            var resp = await fetch(chatUrl, {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': (window.App && App.getCookie ? App.getCookie('csrftoken') : '') || '',
+                    'X-Requested-With': 'XMLHttpRequest'
+                },
+                body: JSON.stringify({ message: texto, history: historial.slice(-10) })
+            });
+            esperando.remove();
+
+            if (resp.redirected || resp.status === 401 || resp.status === 403) {
+                agregar('err-msg', MENSAJES[resp.status] || MENSAJES[403]);
+                return;
+            }
+            var datos = {};
+            try { datos = await resp.json(); } catch (e) { datos = {}; }
+
+            if (resp.ok && datos.response) {
+                agregar('bot-msg', datos.response);
+                historial.push({ role: 'user', content: texto });
+                historial.push({ role: 'assistant', content: datos.response });
+            } else {
+                agregar('err-msg', datos.error || MENSAJES[resp.status] || 'No se pudo contactar al asistente.');
+            }
+        } catch (e) {
+            esperando.remove();
+            agregar('err-msg', 'Error de conexión con el asistente.');
+        }
+    });
+})();
+</script>
+{% endif %}
+
+{% block scripts %}{% endblock %}
+</body>
+</html>

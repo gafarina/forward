@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(Get-ChildItem -Force -Path \".\" -Directory | Select-Object Name; \"--- .env exists:\"; Test-Path \".env\"; \"--- db:\"; Test-Path \"db.sqlite3\"; \"--- python:\"; \\(Get-Command python -ErrorAction SilentlyContinue\\).Source; python --version)",
+      "Bash(git init *)",
+      "Bash(git add *)",
+      "Bash(git ls-remote *)",
+      "Bash(git remote *)",
+      "Bash(git fetch *)",
+      "Bash(git ls-tree *)",
+      "Bash(sed -E 's/\\(=.{0,6}\\).*/\\\\1********/')",
+      "Bash(.venv/Scripts/python.exe -c ' *)"
+    ]
+  }
+}

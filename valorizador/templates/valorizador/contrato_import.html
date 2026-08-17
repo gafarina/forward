@@ -1,0 +1,122 @@
+{% extends 'valorizador/base.html' %}
+{% load format_tags %}
+
+{% block title %}Importar contratos{% endblock %}
+
+{% block content %}
+<div class="page-head">
+    <div>
+        <p class="breadcrumb"><a href="{% url 'contratos_list' %}">Contratos</a> / Importar</p>
+        <h1>Importar contratos</h1>
+        <p class="sub">Archivos CSV, TXT o Excel. Las columnas se reconocen por nombre (contraparte, folio, monto, precio forward, vencimiento, operación, spot inicio…).</p>
+    </div>
+    <div class="actions">
+        <a href="{% url 'contratos_list' %}" class="btn secondary">Volver</a>
+    </div>
+</div>
+
+{% if errores %}
+<div class="alert warning" role="alert">
+    <div class="txt">
+        <strong>{{ errores|length }} incidencia{{ errores|length|pluralize:"s" }} al leer el archivo</strong>
+        <p class="tiny" style="margin-top:4px">Estas filas no aparecen en la vista previa o se importarán con datos incompletos. Revísalas antes de confirmar.</p>
+        <ul>
+            {% for e in errores %}<li>{{ e }}</li>{% endfor %}
+        </ul>
+    </div>
+    <button type="button" class="close" data-dismiss aria-label="Cerrar aviso">&times;</button>
+</div>
+{% endif %}
+
+{% if not preview %}
+<div class="card" style="max-width:640px">
+    <h2>Seleccionar archivo</h2>
+    <form method="post" enctype="multipart/form-data" novalidate>
+        {% csrf_token %}
+        <div class="field">
+            <label for="{{ form.archivo.id_for_label }}">{{ form.archivo.label }}</label>
+            {{ form.archivo }}
+            {% if form.archivo.errors %}
+            <ul class="errors">{% for e in form.archivo.errors %}<li>{{ e }}</li>{% endfor %}</ul>
+            {% endif %}
+            <span class="help">Extensiones aceptadas: .csv, .txt, .xlsx, .xlsm, .xls</span>
+        </div>
+        <button type="submit" class="btn">Analizar archivo</button>
+    </form>
+
+    <div class="callout" style="margin-top:18px">
+        <strong>Cómo se leen las columnas.</strong> El importador busca encabezados por nombre y, si no los encuentra,
+        descarta la fila explicando el motivo. Los folios repetidos respecto de los contratos ya cargados se omiten
+        al confirmar.
+    </div>
+</div>
+{% else %}
+<div class="card flush">
+    <div class="card-head">
+        <h2>Vista previa</h2>
+        <span class="muted small">{{ preview|length }} fila{{ preview|length|pluralize:"s" }} lista{{ preview|length|pluralize:"s" }} para importar</span>
+    </div>
+    <div class="table-wrap" style="max-height:520px; overflow-y:auto">
+        <table class="dense">
+            <thead>
+                <tr>
+                    <th scope="col">#</th>
+                    <th scope="col">Folio</th>
+                    <th scope="col">Contraparte</th>
+                    <th scope="col">Operación</th>
+                    <th scope="col">Modalidad</th>
+                    <th scope="col">Moneda</th>
+                    <th scope="col" class="num">Nocional</th>
+                    <th scope="col" class="num">Precio fwd</th>
+                    <th scope="col" class="num">Spot inicio</th>
+                    <th scope="col">Inicio</th>
+                    <th scope="col">Vencimiento</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for c in preview %}
+                <tr>
+                    <td class="muted">{{ forloop.counter }}</td>
+                    <td class="mono">{{ c.folio|default:"—" }}</td>
+                    <td>{{ c.counterparty|default:"—" }}</td>
+                    <td><span class="pill {{ c.side|lower }}">{{ c.side }}</span></td>
+                    <td class="muted">{{ c.modality }}</td>
+                    <td class="mono">{{ c.base_ccy }}/{{ c.quote_ccy }}</td>
+                    <td class="num">{{ c.notional|formato_numero:0 }}</td>
+                    <td class="num">{{ c.fwd_price|formato_precio }}</td>
+                    <td class="num">
+                        {% if c.spot_inicio %}{{ c.spot_inicio|formato_precio }}
+                        {% else %}<span class="neg" title="Sin spot inicial la descomposición queda en cero">falta</span>{% endif %}
+                    </td>
+                    <td class="nowrap muted">{{ c.start_date|default:"—" }}</td>
+                    <td class="nowrap">{{ c.maturity_date }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="card" style="max-width:640px">
+    <h2>Confirmar importación</h2>
+    <form method="post" novalidate>
+        {% csrf_token %}
+        <input type="hidden" name="import_data" value="{{ preview_json }}">
+        <div class="field">
+            <label for="cartera_id">Asignar a la cartera</label>
+            <select name="cartera_id" id="cartera_id" class="select">
+                <option value="">Sin cartera</option>
+                {% for c in carteras %}
+                <option value="{{ c.pk }}">{{ c.nombre }}</option>
+                {% endfor %}
+            </select>
+            <span class="help">Todas las filas importadas quedarán en esta cartera. Puedes cambiarla después contrato por contrato.</span>
+        </div>
+        <div class="row">
+            <button type="submit" name="confirm" value="1" class="btn">Importar {{ preview|length }} contrato{{ preview|length|pluralize:"s" }}</button>
+            <a href="{% url 'contratos_import' %}" class="btn secondary">Cargar otro archivo</a>
+        </div>
+    </form>
+</div>
+{% endif %}
+{% endblock %}

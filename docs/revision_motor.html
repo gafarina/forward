@@ -1,0 +1,1089 @@
+﻿<!doctype html>
+<html lang="es-CL">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Revisión del Motor de Forwards</title>
+<style>
+  :root {
+    --ground:      #FBFCFD;
+    --surface:     #F2F5F8;
+    --surface-2:   #E9EEF3;
+    --ink:         #12171F;
+    --ink-soft:    #48545F;
+    --ink-faint:   #6E7C88;
+    --rule:        #D8E0E7;
+    --rule-strong: #B9C5CF;
+    --accent:      #1F4E79;
+    --accent-soft: #E3EDF5;
+    --alta:        #A81E14;
+    --alta-bg:     #FBEAE8;
+    --media:       #8A5200;
+    --media-bg:    #FBF1E0;
+    --baja:        #5A6875;
+    --baja-bg:     #ECEFF2;
+    --ok:          #16624A;
+    --ok-bg:       #E4F1EB;
+
+    --serif: Georgia, "Iowan Old Style", "Palatino Linotype", "Times New Roman", serif;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --mono: ui-monospace, "Cascadia Mono", "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground:      #0D1218;
+      --surface:     #141C24;
+      --surface-2:   #1B252F;
+      --ink:         #E3E9EF;
+      --ink-soft:    #A7B4C0;
+      --ink-faint:   #7C8B98;
+      --rule:        #263239;
+      --rule-strong: #3A4954;
+      --accent:      #7FB2DC;
+      --accent-soft: #14232F;
+      --alta:        #F08A80;
+      --alta-bg:     #2B1614;
+      --media:       #E0A94F;
+      --media-bg:    #2A2113;
+      --baja:        #93A2AF;
+      --baja-bg:     #1A222A;
+      --ok:          #6DC5A2;
+      --ok-bg:       #12241D;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --ground:      #0D1218;
+    --surface:     #141C24;
+    --surface-2:   #1B252F;
+    --ink:         #E3E9EF;
+    --ink-soft:    #A7B4C0;
+    --ink-faint:   #7C8B98;
+    --rule:        #263239;
+    --rule-strong: #3A4954;
+    --accent:      #7FB2DC;
+    --accent-soft: #14232F;
+    --alta:        #F08A80;
+    --alta-bg:     #2B1614;
+    --media:       #E0A94F;
+    --media-bg:    #2A2113;
+    --baja:        #93A2AF;
+    --baja-bg:     #1A222A;
+    --ok:          #6DC5A2;
+    --ok-bg:       #12241D;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 16px;
+    line-height: 1.62;
+    margin: 0;
+    padding: 0 24px 96px;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap { max-width: 980px; margin: 0 auto; }
+
+  /* ---------- Encabezado ---------- */
+
+  header.doc {
+    padding: 64px 0 32px;
+    border-bottom: 2px solid var(--ink);
+    margin-bottom: 40px;
+  }
+  .eyebrow {
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    font-weight: 600;
+    margin: 0 0 18px;
+  }
+  h1 {
+    font-family: var(--serif);
+    font-size: clamp(32px, 5vw, 46px);
+    line-height: 1.12;
+    letter-spacing: -0.015em;
+    font-weight: 400;
+    margin: 0 0 18px;
+    text-wrap: balance;
+  }
+  .standfirst {
+    font-size: 18px;
+    line-height: 1.55;
+    color: var(--ink-soft);
+    max-width: 62ch;
+    margin: 0 0 32px;
+  }
+  .meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0 40px;
+    font-size: 13px;
+    color: var(--ink-faint);
+  }
+  .meta div { display: flex; flex-direction: column; gap: 2px; }
+  .meta dt {
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    font-weight: 600;
+  }
+  .meta dd { margin: 0; color: var(--ink); font-weight: 500; }
+
+  /* ---------- Estructura ---------- */
+
+  section { margin: 0 0 56px; }
+
+  h2 {
+    font-family: var(--serif);
+    font-size: 25px;
+    font-weight: 400;
+    letter-spacing: -0.01em;
+    margin: 0 0 6px;
+    text-wrap: balance;
+  }
+  h2 + .sectionnote {
+    color: var(--ink-faint);
+    font-size: 14px;
+    margin: 0 0 26px;
+    max-width: 62ch;
+  }
+  h2:not(.tight) { padding-top: 26px; border-top: 1px solid var(--rule-strong); }
+
+  h3 {
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+    margin: 32px 0 10px;
+  }
+
+  p { max-width: 68ch; margin: 0 0 14px; }
+  strong { font-weight: 650; }
+
+  code {
+    font-family: var(--mono);
+    font-size: 0.875em;
+    background: var(--surface-2);
+    padding: 1px 5px;
+    border-radius: 3px;
+  }
+
+  /* ---------- Veredicto ---------- */
+
+  .verdict {
+    background: var(--surface);
+    border-top: 3px solid var(--accent);
+    padding: 28px 30px;
+    margin-bottom: 40px;
+  }
+  .verdict p {
+    font-family: var(--serif);
+    font-size: 19px;
+    line-height: 1.52;
+    margin: 0;
+    max-width: 64ch;
+  }
+
+  /* ---------- Cifras destacadas ---------- */
+
+  .figures {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 1px;
+    background: var(--rule);
+    border: 1px solid var(--rule);
+    margin: 0 0 40px;
+  }
+  .fig { background: var(--ground); padding: 18px 20px; }
+  .fig .n {
+    font-family: var(--serif);
+    font-size: 30px;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+    display: block;
+    margin-bottom: 7px;
+  }
+  .fig .l { font-size: 12px; color: var(--ink-faint); line-height: 1.4; display: block; }
+  .fig.is-alta .n { color: var(--alta); }
+  .fig.is-media .n { color: var(--media); }
+  .fig.is-ok .n { color: var(--ok); }
+
+  /* ---------- Hallazgos ---------- */
+
+  .finding {
+    display: grid;
+    grid-template-columns: 116px minmax(0, 1fr);
+    gap: 0 28px;
+    padding: 26px 0;
+    border-top: 1px solid var(--rule);
+  }
+  .finding:first-of-type { border-top: 1px solid var(--rule-strong); }
+
+  .ref { padding-top: 3px; }
+  .ref .id {
+    font-family: var(--mono);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    display: block;
+    margin-bottom: 8px;
+  }
+  .sev {
+    display: inline-block;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 3px 8px;
+    margin-bottom: 8px;
+  }
+  .sev.alta  { background: var(--alta-bg);  color: var(--alta); }
+  .sev.media { background: var(--media-bg); color: var(--media); }
+  .sev.baja  { background: var(--baja-bg);  color: var(--baja); }
+  .verif {
+    display: block;
+    font-size: 10.5px;
+    line-height: 1.35;
+    color: var(--ok);
+    font-weight: 650;
+    letter-spacing: 0.02em;
+  }
+
+  .body h4 {
+    font-size: 17px;
+    line-height: 1.34;
+    font-weight: 650;
+    margin: 0 0 12px;
+    text-wrap: balance;
+  }
+  .loc {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    color: var(--ink-faint);
+    margin: -6px 0 14px;
+  }
+
+  /* Par declara / hace */
+  .claimpair {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    gap: 1px;
+    background: var(--rule);
+    border: 1px solid var(--rule);
+    margin: 0 0 16px;
+  }
+  .claim { background: var(--ground); padding: 13px 16px; }
+  .claim .k {
+    font-size: 10px;
+    letter-spacing: 0.11em;
+    text-transform: uppercase;
+    font-weight: 700;
+    color: var(--ink-faint);
+    display: block;
+    margin-bottom: 5px;
+  }
+  .claim p { font-size: 14.5px; line-height: 1.5; margin: 0; }
+  .claim.does .k { color: var(--alta); }
+
+  /* Bloque de evidencia */
+  .evidence {
+    background: var(--surface);
+    border-left: 2px solid var(--rule-strong);
+    padding: 14px 18px;
+    margin: 0 0 14px;
+    overflow-x: auto;
+  }
+  .evidence pre {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    line-height: 1.7;
+    font-variant-numeric: tabular-nums;
+    margin: 0;
+    white-space: pre;
+  }
+  .evidence .cap {
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    font-weight: 700;
+    color: var(--ink-faint);
+    display: block;
+    margin-bottom: 8px;
+  }
+  .impact { font-size: 14.5px; color: var(--ink-soft); margin: 0; }
+  .impact b { color: var(--ink); font-weight: 650; }
+
+  /* ---------- Tablas ---------- */
+
+  .tablewrap { overflow-x: auto; margin: 0 0 20px; border: 1px solid var(--rule); }
+  table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+  th, td { text-align: left; padding: 9px 13px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  thead th {
+    background: var(--surface);
+    font-size: 10.5px;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    font-weight: 700;
+    white-space: nowrap;
+    border-bottom: 1px solid var(--rule-strong);
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; font-family: var(--mono); font-size: 12.5px; white-space: nowrap; }
+  td.idc { font-family: var(--mono); font-size: 12px; white-space: nowrap; font-weight: 600; }
+  .tag {
+    display: inline-block;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    padding: 2px 6px;
+    white-space: nowrap;
+  }
+  .tag.alta  { background: var(--alta-bg);  color: var(--alta); }
+  .tag.media { background: var(--media-bg); color: var(--media); }
+  .tag.baja  { background: var(--baja-bg);  color: var(--baja); }
+  .cat { font-size: 12px; color: var(--ink-faint); white-space: nowrap; }
+
+  /* ---------- Verificado ---------- */
+
+  ul.checks { list-style: none; padding: 0; margin: 0; }
+  ul.checks li {
+    padding: 11px 0 11px 26px;
+    border-bottom: 1px solid var(--rule);
+    position: relative;
+    font-size: 14.5px;
+    max-width: 74ch;
+  }
+  ul.checks li:last-child { border-bottom: none; }
+  ul.checks li::before {
+    content: "✓";
+    position: absolute;
+    left: 0;
+    top: 11px;
+    color: var(--ok);
+    font-weight: 700;
+    font-size: 13px;
+  }
+  ul.checks b { font-weight: 650; }
+
+  /* ---------- Nota de alcance ---------- */
+
+  .scope {
+    background: var(--accent-soft);
+    padding: 20px 24px;
+    font-size: 14px;
+    line-height: 1.6;
+  }
+  .scope p { margin: 0 0 10px; max-width: 72ch; }
+  .scope p:last-child { margin: 0; }
+  .scope .h {
+    font-size: 10.5px;
+    letter-spacing: 0.11em;
+    text-transform: uppercase;
+    font-weight: 700;
+    color: var(--accent);
+    display: block;
+    margin-bottom: 9px;
+  }
+
+  /* ---------- Plan ---------- */
+
+  ol.plan { counter-reset: step; list-style: none; padding: 0; margin: 0; }
+  ol.plan li {
+    counter-increment: step;
+    display: grid;
+    grid-template-columns: 40px minmax(0, 1fr);
+    gap: 0 18px;
+    padding: 16px 0;
+    border-top: 1px solid var(--rule);
+  }
+  ol.plan li::before {
+    content: counter(step);
+    font-family: var(--serif);
+    font-size: 24px;
+    color: var(--accent);
+    line-height: 1.1;
+  }
+  ol.plan .t { font-weight: 650; margin: 0 0 4px; font-size: 15px; }
+  ol.plan .d { margin: 0; font-size: 14px; color: var(--ink-soft); }
+
+  footer.doc {
+    border-top: 1px solid var(--rule-strong);
+    padding-top: 22px;
+    font-size: 12.5px;
+    color: var(--ink-faint);
+  }
+  footer.doc p { max-width: 74ch; }
+
+  @media (max-width: 640px) {
+    body { padding: 0 18px 64px; }
+    .finding { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+    .ref { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding-top: 0; }
+    .ref .id, .sev, .verif { margin-bottom: 0; }
+  }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+<header class="doc">
+  <p class="eyebrow">Revisión técnica · Uso interno</p>
+  <h1>Valorizador de forwards FX: funcionamiento e intención de cálculo</h1>
+  <p class="standfirst">
+    Auditoría del motor de valorización contrastando, para cada cálculo, lo que la
+    documentación declara hacer contra lo que el código hace de verdad, verificado
+    ejecutándolo con números.
+  </p>
+  <dl class="meta">
+    <div><dt>Alcance</dt><dd>6 de 8 dimensiones</dd></div>
+    <div><dt>Hallazgos</dt><dd>57</dd></div>
+    <div><dt>Verificados en ejecución</dt><dd>14 de forma independiente</dd></div>
+    <div><dt>Aspectos auditados sin defecto</dt><dd>87</dd></div>
+  </dl>
+</header>
+
+<section>
+  <div class="verdict">
+    <p>
+      El núcleo del cálculo es correcto y la reconciliación contra la planilla de
+      referencia es real. Pero prácticamente toda opción metodológica que se aparte
+      de esa configuración está rota o mal declarada, y el módulo de riesgo de
+      crédito tiene tres errores de cálculo confirmados.
+    </p>
+  </div>
+
+  <div class="figures">
+    <div class="fig is-ok"><span class="n">0,00</span><span class="l">Diferencia contra la planilla, MtM y componente spot</span></div>
+    <div class="fig is-alta"><span class="n">12</span><span class="l">Hallazgos de severidad alta</span></div>
+    <div class="fig is-media"><span class="n">21</span><span class="l">Severidad media</span></div>
+    <div class="fig"><span class="n">24</span><span class="l">Severidad baja</span></div>
+  </div>
+
+  <div class="scope">
+    <span class="h">Cómo leer este informe</span>
+    <p>
+      Cada hallazgo enfrenta dos afirmaciones: <b>lo que el sistema declara hacer</b>
+      —docstring, metodología o etiqueta que ve el usuario— y <b>lo que hace</b> al
+      ejecutarlo. Todos los números que aparecen abajo salieron de correr el motor,
+      no de leerlo.
+    </p>
+    <p>
+      Dos de las ocho dimensiones planificadas (capa web e importadores de datos) no
+      alcanzaron a completarse. Los 43 hallazgos que no marqué como verificados de
+      forma independiente traen evidencia ejecutada por el analista que los levantó,
+      pero no pasaron por una segunda comprobación.
+    </p>
+  </div>
+</section>
+
+<section>
+  <h2>Lo que está correcto</h2>
+  <p class="sectionnote">
+    Ochenta y siete aspectos se auditaron y quedaron limpios. Estos son los que
+    sostienen la confianza en el resto del sistema.
+  </p>
+  <ul class="checks">
+    <li><b>La reconciliación es real.</b> Con ACT/360, interpolación y extrapolación lineales, capitalización compuesta y sin ajuste de días hábiles, los tres contratos de referencia reproducen la planilla al centavo: total <b>−6.850.442,17</b>, y las tasas de descuento coinciden dígito por dígito con las celdas del libro. Lo verifiqué al inicio y al final de cada bloque de pruebas: <b>ninguno de los 57 hallazgos afecta esa configuración</b>.</li>
+    <li><b>La convención de signos</b> se derivó desde primeros principios: el flujo esperado (K−F)·N descontado da exactamente el MtM del motor, e invertir el lado invierte todo y sólo el signo.</li>
+    <li><b>Delta es exactamente −ε·N·DF</b> y el <b>DV01 responde a 1,000000 puntos base</b> medidos. Gamma cero es correcto por la linealidad del producto, no un atajo.</li>
+    <li><b>La descomposición contable cierra.</b> Componente spot más puntos forward menos MtM da cero exacto, incluso en una cartera de 500 contratos, donde el error de redondeo acumulado es de <b>0,087 CLP sobre 240 millones</b>.</li>
+    <li><b>La exposición esperada del CVA está bien derivada.</b> La fórmula cerrada de Bachelier se validó contra Monte Carlo de un millón de trayectorias en cuatro configuraciones: todas dentro de dos errores estándar.</li>
+    <li><b>ACT/ACT ISDA</b> reproduce los seis ejemplos publicados por ISDA con diferencia cero, y no la confunde con la variante ICMA. <b>30/360 y 30E/360</b> son correctas en veinte casos frontera.</li>
+    <li><b>Los feriados chilenos</b> están bien: traslados de la Ley 20.215, Día de las Iglesias Evangélicas, feriados puente del 18 de septiembre y la unión con el calendario estadounidense, todos correctos para 2024–2030.</li>
+    <li><b>El neteo respeta la desigualdad de Jensen</b> en 2.000 carteras aleatorias, con violación máxima de 1,1·10⁻¹⁶ — ruido de punto flotante.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>Hallazgos de severidad alta</h2>
+  <p class="sectionnote">
+    Los doce que cambian cifras que alguien podría reportar. Los ocho primeros los
+    reproduje personalmente.
+  </p>
+
+  <div class="finding">
+    <div class="ref">
+      <span class="id">CUR-01 · MOT-01</span>
+      <span class="sev alta">Alta</span>
+      <span class="verif">Verificado en ejecución</span>
+    </div>
+    <div class="body">
+      <h4>La interpolación log-lineal del descuento produce factores mayores que 1</h4>
+      <p class="loc">core/curves.py:258 · _zero_from_df</p>
+      <div class="claimpair">
+        <div class="claim">
+          <span class="k">Declara</span>
+          <p>La metodología llama a este método «el estándar de mercado», dice que «tolera tasas cero o negativas» y acota su diferencia contra la interpolación lineal en «unos 2 puntos base».</p>
+        </div>
+        <div class="claim does">
+          <span class="k">Hace</span>
+          <p>La curva auxiliar de ln(DF) hereda la extrapolación de la curva de <em>tasas</em> y la aplica en el espacio logarítmico, donde no respeta la condición de borde DF(0)=1.</p>
+        </div>
+      </div>
+      <div class="evidence">
+        <span class="cap">Curva de descuento estrictamente positiva, nodo mínimo +3,48 %</span>
+<pre>r(1 día)   = -17,680802 %     DF = 1,0005406067   ← mayor que 1
+r(12 días) =   1,762233 %     vs 3,368499 % lineal  (161 pb de error)
+
+con extrapolación plana:  DF(12d) = DF(92d) = 0,9912903576  ← idénticos</pre>
+      </div>
+      <p class="impact">
+        El valor presente de un flujo futuro sale mayor que el flujo. <b>Ninguna
+        bandera se dispara</b>: sólo aparece el aviso genérico de extrapolación.
+        Ocurre justo donde vive la cartera real —12 a 43 días, todo por debajo del
+        primer nodo de 92— y desvía la cartera de referencia en 3.151 CLP con sólo
+        USD 5 millones de nocional. La opción que la documentación presenta como la
+        más correcta es la que degrada el resultado.
+      </p>
+    </div>
+  </div>
+
+  <div class="finding">
+    <div class="ref">
+      <span class="id">CRE-01</span>
+      <span class="sev alta">Alta</span>
+      <span class="verif">Verificado en ejecución</span>
+    </div>
+    <div class="body">
+      <h4>El CVA se sobrestima un 50 % en los plazos cortos</h4>
+      <p class="loc">core/credit.py:210 · cva_dva_netting_set</p>
+      <div class="claimpair">
+        <div class="claim">
+          <span class="k">Declara</span>
+          <p>La suma se presenta como una discretización de la integral CVA = LGD·∫EPE(t)dS(t), sin declarar ningún sesgo.</p>
+        </div>
+        <div class="claim does">
+          <span class="k">Hace</span>
+          <p>Evalúa la exposición en el <em>extremo derecho</em> de cada intervalo y la multiplica por la probabilidad de default del intervalo completo. Como EPE ∝ √t es creciente y cóncava, la regla del rectángulo derecho sobrestima siempre.</p>
+        </div>
+      </div>
+      <div class="evidence">
+        <span class="cap">Operación ATM de USD 1 millón · malla del motor contra malla convergida</span>
+<pre>plazo      motor        convergido     factor
+  12 d     2.418,63       1.613,32      ×1,499
+  30 d     9.556,53       6.371,73      ×1,500
+ 365 d   282.779,76     267.876,05      ×1,056</pre>
+      </div>
+      <p class="impact">
+        El factor es exactamente <b>3/2</b> cuando el plazo cabe en un solo paso, y
+        el sesgo es peor cuanto más corta es la operación — justo el perfil típico de
+        un forward FX local. Siempre sobrestima, así que no se compensa entre
+        operaciones. Evaluar en el punto medio baja el error de +50 % a cerca del 1 %.
+      </p>
+    </div>
+  </div>
+
+  <div class="finding">
+    <div class="ref">
+      <span class="id">CRE-02</span>
+      <span class="sev alta">Alta</span>
+      <span class="verif">Verificado en ejecución</span>
+    </div>
+    <div class="body">
+      <h4>El CVA de una operación depende del plazo de las demás</h4>
+      <p class="loc">core/credit.py:197 · construcción de la malla</p>
+      <div class="claimpair">
+        <div class="claim">
+          <span class="k">Declara</span>
+          <p>El CVA es la exposición esperada ponderada por la probabilidad marginal de default de cada intervalo — implícitamente, la que ocurre mientras la operación está viva.</p>
+        </div>
+        <div class="claim does">
+          <span class="k">Hace</span>
+          <p>La malla es uniforme hasta el horizonte del conjunto. Una operación que vence a mitad de paso recibe la probabilidad del paso entero, y el tamaño del paso lo fija la operación más larga de esa contraparte.</p>
+        </div>
+      </div>
+      <div class="evidence">
+        <span class="cap">El mismo forward de 1 día, según con quién comparta contraparte</span>
+<pre>solo                            CVA        58,20
+junto a un forward de 5 años    CVA     1.768,99      ×30,4</pre>
+      </div>
+      <p class="impact">
+        Rompe la aditividad económica del ajuste: agregar un forward largo con el
+        mismo banco multiplica por treinta el CVA de uno de un día, sin que nada
+        cambie en ese contrato. <b>Dos corridas del mismo folio —cartera completa y
+        cartera filtrada— entregan cifras irreconciliables</b>, sin ninguna alarma.
+      </p>
+    </div>
+  </div>
+
+  <div class="finding">
+    <div class="ref">
+      <span class="id">MOT-02</span>
+      <span class="sev alta">Alta</span>
+      <span class="verif">Verificado en ejecución</span>
+    </div>
+    <div class="body">
+      <h4>Un único tipo de cambio escalar se aplica a cualquier par de monedas</h4>
+      <p class="loc">core/valuation.py:163 · MarketData.spot</p>
+      <div class="claimpair">
+        <div class="claim">
+          <span class="k">Declara</span>
+          <p>El componente spot se define con «el spot de la fecha de valorización» del par del contrato, y el formulario ofrece explícitamente USD, EUR y CLP como moneda base.</p>
+        </div>
+        <div class="claim does">
+          <span class="k">Hace</span>
+          <p>Toma un escalar único, alimentado con el spot USD/CLP, sin mirar la moneda del contrato.</p>
+        </div>
+      </div>
+      <div class="evidence">
+        <span class="cap">Venta de EUR 1 millón, spot de inicio igual al de mercado</span>
+<pre>spot usado          892,89   (el real EUR/CLP es 958,40)
+componente spot  65.285.007,15   (lo correcto es 0,00)
+banderas         ninguna referida a moneda</pre>
+      </div>
+      <p class="impact">
+        El MtM total queda bien, de modo que <b>cuadrar contra el MtM no lo
+        detecta</b>: el error sólo aparece al abrir la descomposición. Y son
+        precisamente las dos cifras que alimentan la clasificación contable de
+        reserva de cobertura y puntos forward.
+      </p>
+    </div>
+  </div>
+
+  <div class="finding">
+    <div class="ref">
+      <span class="id">CRE-04</span>
+      <span class="sev alta">Alta</span>
+      <span class="verif">Verificado (estructural)</span>
+    </div>
+    <div class="body">
+      <h4>El neteo agrupa operaciones de pares de moneda distintos con correlación 1</h4>
+      <p class="loc">core/valuation.py:416 · _apply_cva</p>
+      <div class="claimpair">
+        <div class="claim">
+          <span class="k">Declara</span>
+          <p>El comentario del código justifica la agregación diciendo que «todas las operaciones del conjunto miran el <em>mismo</em> tipo de cambio, así que sus exposiciones están perfectamente correlacionadas».</p>
+        </div>
+        <div class="claim does">
+          <span class="k">Hace</span>
+          <p>Agrupa sólo por nombre de contraparte, ignorando la moneda. Un forward USD/CLP y uno EUR/CLP con el mismo banco se agregan como si estuvieran perfectamente correlacionados.</p>
+        </div>
+      </div>
+      <div class="evidence">
+        <span class="cap">Venta USD/CLP y compra EUR/CLP con la misma contraparte, a un año</span>
+<pre>CVA del motor (correlación 1 implícita)          76,80
+CVA correcto por Monte Carlo, ρ = 0,8       178.374,34
+                                             ×2.322 de subestimación</pre>
+      </div>
+      <p class="impact">
+        Una tesorería que opere USD/CLP y EUR/CLP con el mismo banco —el caso
+        normal— obtiene un CVA que puede ser <b>tres órdenes de magnitud menor</b>
+        que el correcto, y en la dirección peligrosa. La columna «conjunto de neteo»
+        muestra sólo el nombre del banco.
+      </p>
+    </div>
+  </div>
+
+  <div class="finding">
+    <div class="ref">
+      <span class="id">EXC-02</span>
+      <span class="sev alta">Alta</span>
+      <span class="verif">Verificado por inspección</span>
+    </div>
+    <div class="body">
+      <h4>Los desplegables de capitalización y convención de días del libro Excel no entran en ninguna fórmula</h4>
+      <p class="loc">core/excel_model.py:498 · hoja Parámetros, celdas C9 y C10</p>
+      <div class="claimpair">
+        <div class="claim">
+          <span class="k">Declara</span>
+          <p>Las celdas se pintan como entradas editables, con validación de lista, bajo el subtítulo «Celdas azules: entradas del usuario. Todo el libro depende de ellas».</p>
+        </div>
+        <div class="claim does">
+          <span class="k">Hace</span>
+          <p>Ninguna fórmula del libro referencia esas celdas. El factor de descuento está escrito fijo como (1+r/100)^(−t) en las cien filas.</p>
+        </div>
+      </div>
+      <div class="evidence">
+        <span class="cap">Libro relleno, cambiando la convención a 30/360 y la capitalización a Continua</span>
+<pre>antes    TOTAL = -1.932.474,33337284    DF = 0,996565518977846
+después  TOTAL = -1.932.474,33337284    DF = 0,996565518977846
+                                        idénticos bit a bit
+
+lo que el motor devuelve con esa configuración:
+  Continua   -1.936.065,91   → el libro se desvía  3.591,58 CLP
+  30/360     -1.929.928,23   → el libro se desvía  2.546,10 CLP</pre>
+      </div>
+      <p class="impact">
+        El usuario cree haber cambiado la base metodológica del descuento y recibe
+        los mismos números compuestos. En un contrato de USD 10 millones a dos años
+        la desviación llega a <b>131.342 CLP</b>. En la plantilla en blanco no hay
+        ninguna advertencia.
+      </p>
+    </div>
+  </div>
+
+  <div class="finding">
+    <div class="ref">
+      <span class="id">EXC-01</span>
+      <span class="sev alta">Alta</span>
+    </div>
+    <div class="body">
+      <h4>Una curva de un solo nodo hace que el Excel lea una celda vacía</h4>
+      <p class="loc">core/excel_model.py:773 · _indice_k</p>
+      <div class="claimpair">
+        <div class="claim">
+          <span class="k">Declara</span>
+          <p>La hoja Metodología afirma que la fórmula del índice «es correcta en los tres regímenes», y que se usa COUNTIF precisamente porque «ignora las celdas vacías».</p>
+        </div>
+        <div class="claim does">
+          <span class="k">Hace</span>
+          <p>Con un solo nodo el índice queda en 1 y la interpolación lee la celda siguiente, que está vacía. Excel la interpreta como cero y la pendiente resultante devuelve y₁·x/x₁.</p>
+        </div>
+      </div>
+      <div class="evidence">
+        <span class="cap">Plantilla en blanco con un nodo forward, recalculada</span>
+<pre>forward a 37 días    33.011,77   en vez de   892,21
+MtM de la fila     -32.014.497.881,03
+TOTAL del libro    886.077.700.598,46
+alertas            «Forward linealmente extrapolado» — lo mismo que en el caso sano</pre>
+      </div>
+      <p class="impact">
+        Casi <b>886 mil millones de pesos</b> de error en un libro de USD 8 millones,
+        sin ningún indicador de fallo. Se dispara en el flujo publicitado de la
+        plantilla en blanco, o si el usuario borra nodos hasta dejar uno.
+      </p>
+    </div>
+  </div>
+
+  <div class="finding">
+    <div class="ref">
+      <span class="id">ESC-01</span>
+      <span class="sev alta">Alta</span>
+      <span class="verif">Verificado por inspección</span>
+    </div>
+    <div class="body">
+      <h4>El eje «Tasa» del mapa de calor sólo mueve la curva de descuento</h4>
+      <p class="loc">valorizador/views.py:770 · valorizacion_detail.html:117</p>
+      <div class="claimpair">
+        <div class="claim">
+          <span class="k">Declara</span>
+          <p>La plantilla rotula el eje «Tasa» y explica «filas: desplazamiento paralelo de la curva en puntos base», sin decir de cuál curva.</p>
+        </div>
+        <div class="claim does">
+          <span class="k">Hace</span>
+          <p>Usa el DV01, que desplaza únicamente la curva de descuento. Omite el repricing del forward, que por paridad cubierta es el efecto dominante de un movimiento de la tasa en pesos.</p>
+        </div>
+      </div>
+      <div class="evidence">
+        <span class="cap">Escenario de +100 pb sobre la cartera de referencia</span>
+<pre>lo que muestra el mapa      -6.846.970,17    ganancia de  +3.472   (celda verde)
+revaluación coherente      -10.339.191,70    pérdida de   -3.488.750
+
+                                            signo invertido, ×1.005</pre>
+      </div>
+      <p class="impact">
+        Quien evalúe «qué pasa si las tasas suben 100 pb» ve una mejora de tres mil
+        pesos donde la posición real perdería 3,5 millones, <b>y la celda se colorea
+        verde</b>. La linealización en sí es buena: el error de aproximación es de
+        17 CLP. El problema es el alcance del shock, no su precisión.
+      </p>
+    </div>
+  </div>
+
+  <h3>Los cuatro restantes de severidad alta</h3>
+  <div class="tablewrap">
+    <table>
+      <thead>
+        <tr><th>Ref.</th><th>Hallazgo</th><th>Evidencia</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="idc">CUR-02</td>
+          <td>La metodología afirma que la extrapolación «Puntos» es idéntica a «Lineal» y publica una tabla de números que el código ya no produce. El informe de auditoría marca ese punto como resuelto; la metodología quedó congelada en el estado anterior.</td>
+          <td class="num">12,8 pb<br>a 1.000 días</td>
+        </tr>
+        <tr>
+          <td class="idc">CUR-03</td>
+          <td>«Puntos» no mantiene constante el diferencial de tasas como promete el docstring: mantiene la pendiente. El diferencial implícito decae y a los 1.690 días <b>cambia de signo</b>. La etiqueta del formulario dice «Puntos forward constantes», que es la definición de otra política.</td>
+          <td class="num">2.259.416 CLP<br>por USD 1M a 5 años</td>
+        </tr>
+        <tr>
+          <td class="idc">CRE-03</td>
+          <td>Las cifras que la metodología usa para justificar el rediseño del CVA no se reproducen, y el «beneficio de neteo del 14,6 %» que declara es en realidad <b>0,47 %</b>, porque las tres operaciones del ejemplo son del mismo lado.</td>
+          <td class="num">+18,7 %<br>sobre el CVA publicado</td>
+        </tr>
+        <tr>
+          <td class="idc">MOT-01</td>
+          <td>Misma causa raíz que CUR-01, vista desde el motor: <code>_prepare_curves</code> inyecta un único método de interpolación en la curva forward y en la de descuento, que son objetos de naturaleza distinta.</td>
+          <td class="num">−3.151,45 CLP<br>en la cartera de referencia</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section>
+  <h2>Validaciones ausentes en el módulo de crédito</h2>
+  <p class="sectionnote">
+    Cuatro entradas que el formulario acepta y que producen resultados sin sentido,
+    todas en silencio. Las cuatro las reproduje.
+  </p>
+  <div class="tablewrap">
+    <table>
+      <thead>
+        <tr><th>Entrada</th><th class="num">CVA</th><th class="num">DVA</th><th>Qué significa</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>recovery = 0,40</code> <span class="cat">(normal)</span></td>
+          <td class="num">282.779,76</td>
+          <td class="num">170.332,25</td>
+          <td>Referencia</td>
+        </tr>
+        <tr>
+          <td><code>recovery = 1,0</code></td>
+          <td class="num">0,00</td>
+          <td class="num">170.332,25</td>
+          <td>El ajuste de crédito <b>mejora</b> el MtM</td>
+        </tr>
+        <tr>
+          <td><code>recovery = 1,5</code></td>
+          <td class="num">−5.857.798,03</td>
+          <td class="num">170.332,25</td>
+          <td>Severidad negativa</td>
+        </tr>
+        <tr>
+          <td><code>spread_bp = −50</code></td>
+          <td class="num">0,00</td>
+          <td class="num">0,00</td>
+          <td>Supervivencia a un año de 1,008368 — una probabilidad mayor que 1</td>
+        </tr>
+        <tr>
+          <td>Contrapartes en blanco</td>
+          <td class="num">0,00</td>
+          <td class="num">0,00</td>
+          <td>Se netean entre sí como una sola entidad legal; con nombres distintos el CVA es 23.798,80</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <p>
+    La causa de las dos primeras es concreta: la cota <code>max(lgd, 1e-6)</code>
+    protege el hazard —donde se divide— pero la severidad se usa <strong>cruda</strong>
+    en el paso de CVA, donde se multiplica.
+  </p>
+</section>
+
+<section>
+  <h2>Documentación que contradice al código</h2>
+  <p class="sectionnote">
+    Importa porque el documento de metodología es la especificación del modelo: es
+    contra él que se controla, y contra él que un revisor externo compararía.
+  </p>
+  <div class="tablewrap">
+    <table>
+      <thead>
+        <tr><th>Sección</th><th>Lo que declara</th><th>Lo que ocurre</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="idc">§5.1 · §5.5</td>
+          <td>La política «Puntos» es idéntica a «Lineal», con tabla numérica</td>
+          <td>Son ramas distintas desde hace tiempo; la tabla publicada es falsa</td>
+        </tr>
+        <tr>
+          <td class="idc">§6.5</td>
+          <td>Tabla de MtM por convención de conteo de días</td>
+          <td>No se reproduce con ninguna configuración: 19.186 CLP de diferencia. Las columnas de fracción de año y factor de descuento sí reproducen exactamente</td>
+        </tr>
+        <tr>
+          <td class="idc">§10.4 · §12.3</td>
+          <td>El neteo agrega varianzas suponiendo correlación nula, y cita el código</td>
+          <td>El código suma sensibilidades con signo —correlación 1—; el bloque citado ya no existe</td>
+        </tr>
+        <tr>
+          <td class="idc">§10.5</td>
+          <td>CVA 41.944,30 y beneficio de neteo del 14,6 %</td>
+          <td>El motor da 49.790,29 y un beneficio de 0,47 %</td>
+        </tr>
+        <tr>
+          <td class="idc">§12.4</td>
+          <td>«Inconsistencia de segundo orden» en el descuento log-lineal</td>
+          <td>No existe: la base anual se cancela algebraicamente. Y omite que ACT/365 también coincide exacto</td>
+        </tr>
+        <tr>
+          <td class="idc">excel_model</td>
+          <td>La reconciliación «compara de verdad Excel contra motor y no contra una segunda implementación escrita a mano»</td>
+          <td>Es exactamente una segunda implementación: nunca llama al motor, así que la hoja <b>no puede fallar por construcción</b></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section>
+  <h2>Índice completo</h2>
+  <p class="sectionnote">
+    Los 57 hallazgos por dimensión. Cada uno tiene en el archivo de trabajo su
+    evidencia numérica y el script que la reproduce.
+  </p>
+
+  <h3>Curvas · 10</h3>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Ref.</th><th>Sev.</th><th>Tipo</th><th>Hallazgo</th></tr></thead>
+    <tbody>
+      <tr><td class="idc">CUR-01</td><td><span class="tag alta">Alta</span></td><td class="cat">Cálculo</td><td>Log-lineal en el descuento rompe DF(0)=1: factores mayores que 1 y tasas negativas</td></tr>
+      <tr><td class="idc">CUR-02</td><td><span class="tag alta">Alta</span></td><td class="cat">Doc</td><td>La metodología afirma que «Puntos» es idéntica a «Lineal» y publica números que el código no produce</td></tr>
+      <tr><td class="idc">CUR-03</td><td><span class="tag alta">Alta</span></td><td class="cat">Cálculo</td><td>«Puntos» colapsa el diferencial de tasas y le cambia el signo; la etiqueta describe una tercera cosa</td></tr>
+      <tr><td class="idc">CUR-04</td><td><span class="tag media">Media</span></td><td class="cat">Doc</td><td>La «inconsistencia de segundo orden» vale 1.007 CLP por millón con 30/360</td></tr>
+      <tr><td class="idc">CUR-05</td><td><span class="tag media">Media</span></td><td class="cat">Robustez</td><td>Log-lineal cae a lineal en silencio si algún nodo es ≤ 0, y la configuración guardada miente</td></tr>
+      <tr><td class="idc">CUR-06</td><td><span class="tag baja">Baja</span></td><td class="cat">Funcional</td><td>«Escalonada» con extrapolación lineal produce valores fuera del recorrido de los nodos</td></tr>
+      <tr><td class="idc">CUR-07</td><td><span class="tag baja">Baja</span></td><td class="cat">Presentación</td><td>Los nodos duplicados se colapsan en silencio; el importador sí avisa por lo mismo</td></tr>
+      <tr><td class="idc">CUR-08</td><td><span class="tag baja">Baja</span></td><td class="cat">Doc</td><td>El campo <code>_extrapolated</code> que el módulo promete nunca se asigna</td></tr>
+      <tr><td class="idc">CUR-09</td><td><span class="tag baja">Baja</span></td><td class="cat">Cálculo</td><td>El orden (y+a)(1+m) introduce un término cruzado de hasta 8,93 CLP por dólar en las esquinas</td></tr>
+      <tr><td class="idc">CUR-10</td><td><span class="tag baja">Baja</span></td><td class="cat">Presentación</td><td>Un único método de interpolación gobierna dos curvas para las que la metodología recomienda métodos opuestos</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>Motor de valorización · 10</h3>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Ref.</th><th>Sev.</th><th>Tipo</th><th>Hallazgo</th></tr></thead>
+    <tbody>
+      <tr><td class="idc">MOT-01</td><td><span class="tag alta">Alta</span></td><td class="cat">Cálculo</td><td>Un solo método de interpolación se inyecta en la curva forward y en la de descuento</td></tr>
+      <tr><td class="idc">MOT-02</td><td><span class="tag alta">Alta</span></td><td class="cat">Cálculo</td><td>Un tipo de cambio escalar único se aplica a cualquier par de monedas</td></tr>
+      <tr><td class="idc">MOT-03</td><td><span class="tag media">Media</span></td><td class="cat">Cálculo</td><td>Los totales suman MtM de contratos con distinta moneda de cotización, sin bandera</td></tr>
+      <tr><td class="idc">MOT-04</td><td><span class="tag media">Media</span></td><td class="cat">Funcional</td><td>Un contrato que vence hoy se valoriza contra la curva extrapolada y no contra el spot: 675.000 CLP por millón</td></tr>
+      <tr><td class="idc">MOT-05</td><td><span class="tag media">Media</span></td><td class="cat">Presentación</td><td>Los contratos sin spot de inicio desplazan los totales de la descomposición contable sin advertirlo</td></tr>
+      <tr><td class="idc">MOT-06</td><td><span class="tag media">Media</span></td><td class="cat">Funcional</td><td>El conjunto de neteo se arma con la cadena literal de contraparte, sin normalizar</td></tr>
+      <tr><td class="idc">MOT-07</td><td><span class="tag baja">Baja</span></td><td class="cat">Robustez</td><td>El control de rango deja pasar tasa cero —el dato faltante típico— y marca como sospechosas tasas legítimas</td></tr>
+      <tr><td class="idc">MOT-08</td><td><span class="tag baja">Baja</span></td><td class="cat">Doc</td><td>El modo rápido de la matriz ignora por completo el eje de curva</td></tr>
+      <tr><td class="idc">MOT-09</td><td><span class="tag baja">Baja</span></td><td class="cat">Presentación</td><td>El ajuste de vencimiento cambia el MtM sin dejar rastro; el campo que lo señala no lo consume nadie</td></tr>
+      <tr><td class="idc">MOT-10</td><td><span class="tag baja">Baja</span></td><td class="cat">Presentación</td><td><code>delta_pct</code> promete un porcentaje y devuelve un monto en pesos</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>Convenciones y calendarios · 11</h3>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Ref.</th><th>Sev.</th><th>Tipo</th><th>Hallazgo</th></tr></thead>
+    <tbody>
+      <tr><td class="idc">CON-01</td><td><span class="tag media">Media</span></td><td class="cat">Presentación</td><td>Con el ajuste «Exacto» —el valor por defecto— el selector de calendario no tiene ningún efecto, pero se guarda como trazabilidad</td></tr>
+      <tr><td class="idc">CON-02</td><td><span class="tag media">Media</span></td><td class="cat">Funcional</td><td>El Año Nuevo estadounidense observado el 31 de diciembre queda en el año equivocado y se pierde</td></tr>
+      <tr><td class="idc">CON-04</td><td><span class="tag media">Media</span></td><td class="cat">Doc</td><td>La tabla de MtM por convención no se reproduce con ninguna configuración</td></tr>
+      <tr><td class="idc">CON-05</td><td><span class="tag media">Media</span></td><td class="cat">Doc</td><td>«30/360» se rotula Bond Basis pero implementa NASD con fin de mes forzado: hasta 3 días de diferencia</td></tr>
+      <tr><td class="idc">CON-03</td><td><span class="tag baja">Baja</span></td><td class="cat">Doc</td><td>La observancia sábado→viernes contradice la justificación escrita sobre sistemas de pago</td></tr>
+      <tr><td class="idc">CON-06</td><td><span class="tag baja">Baja</span></td><td class="cat">Doc</td><td><code>year_basis</code> es funcionalmente inerte; la base se cancela en la interpolación</td></tr>
+      <tr><td class="idc">CON-07</td><td><span class="tag baja">Baja</span></td><td class="cat">Funcional</td><td>Falta el feriado del 2 de enero cuando cae lunes (Ley 20.983), que es ley permanente</td></tr>
+      <tr><td class="idc">CON-08</td><td><span class="tag baja">Baja</span></td><td class="cat">Robustez</td><td>El feriado del solsticio está tabulado hasta 2030 y después desaparece sin aviso</td></tr>
+      <tr><td class="idc">CON-09</td><td><span class="tag baja">Baja</span></td><td class="cat">Robustez</td><td>«ModifiedFollowing» puede devolver una fecha de otro mes, violando su propia definición</td></tr>
+      <tr><td class="idc">CON-10</td><td><span class="tag baja">Baja</span></td><td class="cat">Robustez</td><td><code>day_count_days</code> acepta convenciones inexistentes y devuelve días corridos en silencio</td></tr>
+      <tr><td class="idc">CON-11</td><td><span class="tag baja">Baja</span></td><td class="cat">Robustez</td><td>El calendario conjunto no inicializa su clase base; la validación de configuración omite el calendario</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>Riesgo de crédito · 9</h3>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Ref.</th><th>Sev.</th><th>Tipo</th><th>Hallazgo</th></tr></thead>
+    <tbody>
+      <tr><td class="idc">CRE-01</td><td><span class="tag alta">Alta</span></td><td class="cat">Cálculo</td><td>La exposición se evalúa en el extremo derecho del intervalo: +47 % de CVA en la cartera de referencia</td></tr>
+      <tr><td class="idc">CRE-02</td><td><span class="tag alta">Alta</span></td><td class="cat">Cálculo</td><td>La probabilidad del paso completo se aplica a operaciones que vencen antes: hasta ×45</td></tr>
+      <tr><td class="idc">CRE-03</td><td><span class="tag alta">Alta</span></td><td class="cat">Doc</td><td>Las cifras publicadas de CVA no son reproducibles; el beneficio de neteo declarado es 31 veces mayor que el real</td></tr>
+      <tr><td class="idc">CRE-04</td><td><span class="tag alta">Alta</span></td><td class="cat">Funcional</td><td>El neteo cruza pares de moneda distintos con correlación 1 implícita</td></tr>
+      <tr><td class="idc">CRE-05</td><td><span class="tag media">Media</span></td><td class="cat">Doc</td><td>El docstring promete asignación por contribución marginal; el código reparte por exposición bruta, así que una cobertura nunca recibe crédito negativo</td></tr>
+      <tr><td class="idc">CRE-06</td><td><span class="tag media">Media</span></td><td class="cat">Robustez</td><td>Un spread negativo devuelve CVA y DVA exactamente cero, sin advertencia</td></tr>
+      <tr><td class="idc">CRE-07</td><td><span class="tag media">Media</span></td><td class="cat">Robustez</td><td>La cota de severidad se aplica donde se divide pero no donde se multiplica</td></tr>
+      <tr><td class="idc">CRE-08</td><td><span class="tag baja">Baja</span></td><td class="cat">Robustez</td><td>Una volatilidad negativa deja el total correcto pero concentra todo el CVA en una sola operación</td></tr>
+      <tr><td class="idc">CRE-09</td><td><span class="tag baja">Baja</span></td><td class="cat">Doc</td><td>El tiempo de crédito usa base 365 fija, ignorando la convención elegida: +2,13 %</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>Escenarios · 8</h3>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Ref.</th><th>Sev.</th><th>Tipo</th><th>Hallazgo</th></tr></thead>
+    <tbody>
+      <tr><td class="idc">ESC-01</td><td><span class="tag alta">Alta</span></td><td class="cat">Funcional</td><td>El eje «Tasa» del mapa de calor sólo mueve el descuento: signo invertido y magnitud mil veces menor</td></tr>
+      <tr><td class="idc">ESC-02</td><td><span class="tag media">Media</span></td><td class="cat">Funcional</td><td>Sin sensibilidades, el mapa queda plano y afirma sensibilidad cero donde el efecto real es de 99,7 millones</td></tr>
+      <tr><td class="idc">ESC-03</td><td><span class="tag media">Media</span></td><td class="cat">Doc</td><td>El modo rápido elimina el eje de curva: hasta 233 millones de diferencia contra la revaluación completa</td></tr>
+      <tr><td class="idc">ESC-04</td><td><span class="tag media">Media</span></td><td class="cat">Cálculo</td><td>El eje de curva se declara cambio del diferencial de tasas pero el descuento no se mueve: 12,5 millones por celda</td></tr>
+      <tr><td class="idc">ESC-05</td><td><span class="tag baja">Baja</span></td><td class="cat">Doc</td><td>La matriz calcula el CVA 25 veces y lo descarta; sus celdas no coinciden con el indicador de la misma pantalla</td></tr>
+      <tr><td class="idc">ESC-06</td><td><span class="tag baja">Baja</span></td><td class="cat">Robustez</td><td>El número de puntos se corrige a 5 en silencio y no se devuelve en el resultado</td></tr>
+      <tr><td class="idc">ESC-07</td><td><span class="tag baja">Baja</span></td><td class="cat">Presentación</td><td>Con shocks pequeños los encabezados colapsan: cinco columnas rotuladas «0,0 %» con cifras que difieren en cientos de miles</td></tr>
+      <tr><td class="idc">ESC-08</td><td><span class="tag baja">Baja</span></td><td class="cat">Robustez</td><td>El shock se elige por prefijo del nombre de la curva; con otro nombre la matriz sale plana y la celda se contradice a sí misma</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>Libro Excel · 9</h3>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Ref.</th><th>Sev.</th><th>Tipo</th><th>Hallazgo</th></tr></thead>
+    <tbody>
+      <tr><td class="idc">EXC-01</td><td><span class="tag alta">Alta</span></td><td class="cat">Cálculo</td><td>Una curva de un solo nodo hace leer una celda vacía: 886 mil millones de error sin alerta</td></tr>
+      <tr><td class="idc">EXC-02</td><td><span class="tag alta">Alta</span></td><td class="cat">Presentación</td><td>Los desplegables de capitalización y convención de días no entran en ninguna fórmula</td></tr>
+      <tr><td class="idc">EXC-03</td><td><span class="tag media">Media</span></td><td class="cat">Doc</td><td>La reconciliación no llama al motor: es una segunda implementación, así que no puede fallar</td></tr>
+      <tr><td class="idc">EXC-04</td><td><span class="tag media">Media</span></td><td class="cat">Funcional</td><td>Con más de una curva, las filas que usaban la otra salen mal sin marca fila a fila</td></tr>
+      <tr><td class="idc">EXC-05</td><td><span class="tag media">Media</span></td><td class="cat">Robustez</td><td>Una línea que el libro no puede representar desaparece de la reconciliación y el veredicto global sigue diciendo que cuadra</td></tr>
+      <tr><td class="idc">EXC-06</td><td><span class="tag media">Media</span></td><td class="cat">Doc</td><td>La hoja de sensibilidad replica el defecto de ejes colineales y lo presenta como «pérdida máxima»</td></tr>
+      <tr><td class="idc">EXC-07</td><td><span class="tag media">Media</span></td><td class="cat">Cálculo</td><td>La regla de signo del Excel se invierte respecto del motor para cualquier etiqueta que no sea «Compra» o «Venta», incluida la celda en blanco</td></tr>
+      <tr><td class="idc">EXC-08</td><td><span class="tag baja">Baja</span></td><td class="cat">Cálculo</td><td>La base anual de ACT/ACT se mapea a 365 y el libro usa días/base en vez de ACT/ACT ISDA</td></tr>
+      <tr><td class="idc">EXC-09</td><td><span class="tag baja">Baja</span></td><td class="cat">Funcional</td><td>La reconciliación compara sólo 4 de los 12 campos que calcula</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section>
+  <h2>Orden de corrección propuesto</h2>
+  <p class="sectionnote">
+    Ordenado por cuánto dinero puede reportar mal el sistema, y por si el usuario
+    tiene alguna forma de darse cuenta.
+  </p>
+  <ol class="plan">
+    <li>
+      <div>
+        <p class="t">Validaciones de entrada del módulo de crédito</p>
+        <p class="d">Acotar severidad, spread y volatilidad en el formulario <em>y</em> en el motor, y usar la cota de severidad en los dos lugares donde aparece. Es el arreglo más barato del informe y elimina cuatro modos de falla silenciosa.</p>
+      </div>
+    </li>
+    <li>
+      <div>
+        <p class="t">Los dos errores de cuadratura del CVA</p>
+        <p class="d">Evaluar la exposición en el punto medio del intervalo, e incluir los vencimientos de cada operación en la malla. Son cambios de pocas líneas con dirección de error conocida: uno sobrestima siempre, el otro rompe la aditividad.</p>
+      </div>
+    </li>
+    <li>
+      <div>
+        <p class="t">Interpolación log-lineal del descuento</p>
+        <p class="d">Anclar la curva de factores en DF(0)=1 antes de extrapolar, o extrapolar sobre la tasa y reservar los factores para el tramo entre nodos. Hoy la opción que la documentación recomienda como más correcta es la que empeora el resultado.</p>
+      </div>
+    </li>
+    <li>
+      <div>
+        <p class="t">Homogeneidad de moneda</p>
+        <p class="d">Resolver el spot por par, agrupar los totales por moneda de cotización y separar los conjuntos de neteo por par. Tres defectos con la misma raíz: el motor supone un único par y la interfaz ofrece tres.</p>
+      </div>
+    </li>
+    <li>
+      <div>
+        <p class="t">Etiquetas que prometen algo distinto de lo que entregan</p>
+        <p class="d">El eje «Tasa» del mapa de calor, los desplegables inertes del libro Excel, el selector de calendario sin efecto y la política «Puntos». Ninguno cambia un cálculo: cambian lo que el lector cree estar viendo.</p>
+      </div>
+    </li>
+    <li>
+      <div>
+        <p class="t">Sincronizar la metodología con el código</p>
+        <p class="d">Regenerar las tablas numéricas ejecutando el motor y fijarlas con tests de regresión, para que no vuelvan a divergir. Es el documento contra el que se controla el modelo.</p>
+      </div>
+    </li>
+  </ol>
+</section>
+
+<footer class="doc">
+  <p>
+    Revisión asistida por análisis automatizado con verificación adversarial. Los 14
+    hallazgos marcados como verificados se reprodujeron de forma independiente
+    ejecutando el motor; el resto trae evidencia del análisis original sin segunda
+    comprobación. Las dimensiones de capa web e importadores de datos quedaron
+    pendientes. Documento de trabajo interno: no sustituye la conciliación contra
+    las confirmaciones de las contrapartes.
+  </p>
+</footer>
+
+</div>
+
+</body>
+</html>

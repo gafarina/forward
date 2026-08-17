@@ -1,0 +1,466 @@
+{% extends 'valorizador/base.html' %}
+{% load static format_tags %}
+
+{% block title %}Valorizar{% endblock %}
+
+{% block content %}
+<div class="page-head">
+    <div>
+        <h1>Valorizar cartera</h1>
+        <p class="sub">Define la metodología, elige los contratos y obtén el MtM con su descomposición, sensibilidades y ajustes de crédito.</p>
+    </div>
+    <div class="actions">
+        <a href="{% url 'curvas_list' %}" class="btn secondary">Curvas</a>
+        <a href="{% url 'valorizaciones_list' %}" class="btn secondary">Valorizaciones guardadas</a>
+    </div>
+</div>
+
+{% if not conjuntos %}
+<div class="alert warning">
+    <div class="txt">
+        <strong>No hay conjuntos de curvas cargados.</strong>
+        Sin curvas no se puede valorizar.
+        <a href="{% url 'curvas_create' %}">Crea un conjunto</a>,
+        <a href="{% url 'upload' %}">carga un libro Excel</a> o usa los datos de ejemplo.
+    </div>
+    <form method="post" action="{% url 'datos_ejemplo' %}">
+        {% csrf_token %}
+        <button type="submit" class="btn">Cargar datos de ejemplo</button>
+    </form>
+</div>
+{% endif %}
+
+<form method="post" id="valorizar-form" novalidate>
+    {% csrf_token %}
+    {{ form.contract_ids }}
+
+    {% if form.non_field_errors %}
+    <div class="alert error">
+        <div class="txt">
+            <strong>Revisa los parámetros</strong>
+            <ul>{% for e in form.non_field_errors %}<li>{{ e }}</li>{% endfor %}</ul>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- 1. Datos de la corrida -->
+    <fieldset class="section">
+        <legend>Datos de la corrida</legend>
+        <button type="button" class="section-head" aria-expanded="true" aria-controls="sec-corrida">
+            <span class="step">1</span> Datos de la corrida
+            <span class="chev" aria-hidden="true">▾</span>
+        </button>
+        <div class="section-body" id="sec-corrida">
+            <div class="form-grid">
+                {% include 'valorizador/_campo.html' with campo=form.conjunto %}
+                {% include 'valorizador/_campo.html' with campo=form.etiqueta %}
+                {% include 'valorizador/_campo.html' with campo=form.fecha_valoracion %}
+                {% include 'valorizador/_campo.html' with campo=form.spot_val %}
+                {% include 'valorizador/_campo.html' with campo=form.moneda %}
+                {% include 'valorizador/_campo.html' with campo=form.cartera %}
+            </div>
+        </div>
+    </fieldset>
+
+    <!-- 2. Metodología -->
+    <fieldset class="section">
+        <legend>Metodología</legend>
+        <button type="button" class="section-head" aria-expanded="true" aria-controls="sec-metodologia">
+            <span class="step">2</span> Metodología
+            <span class="chev" aria-hidden="true">▾</span>
+        </button>
+        <div class="section-body" id="sec-metodologia">
+            <p class="muted small" style="margin-bottom:12px">
+                Estas convenciones determinan la comparabilidad con la planilla original. Cámbialas sólo si sabes qué estás replicando.
+            </p>
+            <div class="form-grid">
+                {% include 'valorizador/_campo.html' with campo=form.day_count %}
+                {% include 'valorizador/_campo.html' with campo=form.interp_method %}
+                {% include 'valorizador/_campo.html' with campo=form.extrap_method %}
+                {% include 'valorizador/_campo.html' with campo=form.business_days %}
+                {% include 'valorizador/_campo.html' with campo=form.calendar %}
+                {% include 'valorizador/_campo.html' with campo=form.compounding %}
+            </div>
+        </div>
+    </fieldset>
+
+    <!-- 3. Riesgo -->
+    <fieldset class="section">
+        <legend>Riesgo y crédito</legend>
+        <button type="button" class="section-head" aria-expanded="true" aria-controls="sec-riesgo">
+            <span class="step">3</span> Riesgo y crédito
+            <span class="chev" aria-hidden="true">▾</span>
+        </button>
+        <div class="section-body" id="sec-riesgo">
+            <div class="grid cols-3" style="margin-bottom:0">
+                <div>
+                    {% include 'valorizador/_campo.html' with campo=form.calc_greeks %}
+                    {% include 'valorizador/_campo.html' with campo=form.calc_cva %}
+                    {% include 'valorizador/_campo.html' with campo=form.netting %}
+                </div>
+                <div id="bloque-credito" style="grid-column: span 2">
+                    <p class="muted small" style="margin-bottom:10px">Parámetros de crédito usados en el CVA / DVA.</p>
+                    <div class="form-grid">
+                        {% include 'valorizador/_campo.html' with campo=form.spread_bp %}
+                        {% include 'valorizador/_campo.html' with campo=form.recovery %}
+                        {% include 'valorizador/_campo.html' with campo=form.fx_vol %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </fieldset>
+
+    <!-- 4. Escenarios -->
+    <fieldset class="section">
+        <legend>Escenarios</legend>
+        <button type="button" class="section-head" aria-expanded="true" aria-controls="sec-escenarios">
+            <span class="step">4</span> Escenarios
+            <span class="chev" aria-hidden="true">▾</span>
+        </button>
+        <div class="section-body" id="sec-escenarios">
+            <div class="form-grid">
+                {% include 'valorizador/_campo.html' with campo=form.shock_max %}
+            </div>
+            <p class="muted small">
+                Define el rango del mapa de calor: cinco desplazamientos de spot y cinco de curva, entre −shock y +shock.
+                Cada celda es una revalorización completa de la cartera.
+            </p>
+        </div>
+    </fieldset>
+
+    <!-- Selección de contratos -->
+    <div class="card flush">
+        <div class="card-head">
+            <h2>Contratos a valorizar</h2>
+            <span class="muted small" data-check-count="contratos"></span>
+        </div>
+        {% if contratos %}
+        <div class="select-bar">
+            <button type="button" class="btn secondary sm" data-check-set="contratos" data-check-value="1">Seleccionar todos</button>
+            <button type="button" class="btn secondary sm" data-check-set="contratos" data-check-value="0">Ninguno</button>
+            <span class="muted">Si no marcas ninguno se valorizan todos los contratos vigentes que cumplan los filtros de moneda y cartera.</span>
+        </div>
+        <div class="table-wrap" style="max-height:420px; overflow-y:auto">
+            <table class="dense">
+                <thead>
+                    <tr>
+                        <th scope="col" class="chk">
+                            <input type="checkbox" data-check-all="contratos" aria-label="Seleccionar todos los contratos">
+                        </th>
+                        <th scope="col">Folio</th>
+                        <th scope="col">Contraparte</th>
+                        <th scope="col">Cartera</th>
+                        <th scope="col">Operación</th>
+                        <th scope="col">Moneda</th>
+                        <th scope="col" class="num">Nocional</th>
+                        <th scope="col" class="num">Precio fwd</th>
+                        <th scope="col" class="num">Spot inicio</th>
+                        <th scope="col">Vencimiento</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for c in contratos %}
+                    <tr>
+                        <td class="chk">
+                            <input type="checkbox" data-check="contratos" value="{{ c.pk }}"
+                                   id="chk-{{ c.pk }}" aria-label="Incluir el contrato {{ c.folio|default:c.pk }}">
+                        </td>
+                        <td class="mono"><label for="chk-{{ c.pk }}">{{ c.folio|default:"—" }}</label></td>
+                        <td>{{ c.counterparty|default:"—" }}</td>
+                        <td class="muted">{{ c.cartera.nombre|default:"—" }}</td>
+                        <td><span class="pill {{ c.side|lower }}">{{ c.get_side_display }}</span></td>
+                        <td class="mono">{{ c.base_ccy }}</td>
+                        <td class="num">{{ c.notional|formato_numero:0 }}</td>
+                        <td class="num">{{ c.fwd_price|formato_precio }}</td>
+                        <td class="num">{% if c.spot_inicio %}{{ c.spot_inicio|formato_precio }}{% else %}<span class="neg" title="Falta el spot al inicio">—</span>{% endif %}</td>
+                        <td class="nowrap">{{ c.maturity_date|date:"d/m/Y" }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="empty">
+            <span class="ico" aria-hidden="true">≣</span>
+            <h3>No hay contratos vigentes para valorizar</h3>
+            <p>Agrega contratos o importa una planilla antes de correr la valorización.</p>
+            <div class="row" style="justify-content:center">
+                <a href="{% url 'contrato_create' %}" class="btn">Nuevo contrato</a>
+                <a href="{% url 'contratos_import' %}" class="btn secondary">Importar</a>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="row end">
+        <button type="submit" class="btn" {% if not conjuntos %}disabled{% endif %}>Valorizar</button>
+    </div>
+</form>
+
+{% if result %}
+<hr style="border:0; border-top:1px solid var(--line); margin:26px 0">
+
+<div class="page-head">
+    <div>
+        <h1>Resultado</h1>
+        <p class="sub">
+            {{ result.label|default:"Sin etiqueta" }} · fecha {{ result.valuation_date }} · spot {{ result.spot|formato_precio }}
+        </p>
+    </div>
+    <div class="actions">
+        <form method="post" action="{% url 'valorizar_guardar' %}">
+            {% csrf_token %}
+            <input type="hidden" name="result_data" value="{{ result_json }}">
+            <button type="submit" class="btn">Guardar valorización</button>
+        </form>
+    </div>
+</div>
+
+<div class="grid cols-4">
+    <div class="kpi accent">
+        <span class="label">MtM total</span>
+        <span class="value {{ result.totals.total_mtm|color_mtm }}">{{ result.totals.total_mtm|formato_clp }}</span>
+        <span class="hint">{{ result.diagnostics.valued }} contrato{{ result.diagnostics.valued|pluralize:"s" }} valorizado{{ result.diagnostics.valued|pluralize:"s" }}</span>
+    </div>
+    <div class="kpi accent">
+        <span class="label">MtM ajustado por crédito</span>
+        <span class="value sm {{ result.totals.total_mtm_ajustado|color_mtm }}">{{ result.totals.total_mtm_ajustado|formato_clp }}</span>
+        <span class="hint">CVA {{ result.totals.total_cva|formato_clp }} · DVA {{ result.totals.total_dva|formato_clp }}</span>
+    </div>
+    <div class="kpi accent">
+        <span class="label">Componente spot</span>
+        <span class="value sm {{ result.totals.total_spot|color_mtm }}">{{ result.totals.total_spot|formato_clp }}</span>
+        <span class="hint">Puntos forward {{ result.totals.total_fwdpoints|formato_clp }}</span>
+    </div>
+    <div class="kpi accent">
+        <span class="label">Nocional valorizado</span>
+        <span class="value sm">{{ result.totals.total_notional|formato_numero:0 }}</span>
+        <span class="hint">Moneda base de la corrida</span>
+    </div>
+</div>
+
+<div class="grid cols-4">
+    <div class="kpi">
+        <span class="label">Delta</span>
+        <span class="value sm {{ result.totals.total_delta|color_mtm }}">{{ result.totals.total_delta|formato_numero:0 }}</span>
+        <span class="hint">CLP por 1 peso de spot</span>
+    </div>
+    <div class="kpi">
+        <span class="label">DV01</span>
+        <span class="value sm {{ result.totals.total_dv01|color_mtm }}">{{ result.totals.total_dv01|formato_numero:0 }}</span>
+        <span class="hint">CLP por 1 pb de tasa</span>
+    </div>
+    <div class="kpi">
+        <span class="label">Theta (1 día)</span>
+        <span class="value sm {{ result.totals.total_theta|color_mtm }}">{{ result.totals.total_theta|formato_numero:0 }}</span>
+        <span class="hint">Paso del tiempo</span>
+    </div>
+    <div class="kpi">
+        <span class="label">Diagnóstico</span>
+        <span class="value sm">{{ result.diagnostics.valued }} / {{ result.lines|length }}</span>
+        <span class="hint">
+            {{ result.diagnostics.failed }} con error ·
+            {{ result.diagnostics.with_warnings }} con avisos ·
+            {{ result.diagnostics.extrapolated }} extrapolado{{ result.diagnostics.extrapolated|pluralize:"s" }}
+        </span>
+    </div>
+</div>
+
+{% if result.diagnostics.failed %}
+<div class="alert error">
+    <div class="txt">
+        <strong>{{ result.diagnostics.failed }} contrato{{ result.diagnostics.failed|pluralize:"s" }} quedó fuera de los totales.</strong>
+        Aparece{{ result.diagnostics.failed|pluralize:"n" }} marcado{{ result.diagnostics.failed|pluralize:"s" }} en rojo en la tabla de detalle, con el motivo.
+    </div>
+    <button type="button" class="close" data-dismiss aria-label="Cerrar aviso">&times;</button>
+</div>
+{% endif %}
+
+<div class="card flush">
+    <div class="card-head">
+        <h2>Detalle por contrato</h2>
+        <span class="muted small">Las filas en rojo tienen error y no suman a los totales.</span>
+    </div>
+    <div class="table-wrap">
+        <table class="dense">
+            <thead>
+                <tr>
+                    <th scope="col"><span class="hidden">Avisos</span></th>
+                    <th scope="col">Folio</th>
+                    <th scope="col">Contraparte</th>
+                    <th scope="col">Cartera</th>
+                    <th scope="col">Oper.</th>
+                    <th scope="col">Vcto</th>
+                    <th scope="col" class="num">Días</th>
+                    <th scope="col" class="num">Fracción año</th>
+                    <th scope="col" class="num">Nocional</th>
+                    <th scope="col" class="num">Spot inicio</th>
+                    <th scope="col" class="num">Spot val.</th>
+                    <th scope="col" class="num">Fwd contrato</th>
+                    <th scope="col" class="num">Fwd mercado</th>
+                    <th scope="col" class="num">Tasa desc.</th>
+                    <th scope="col" class="num">Factor desc.</th>
+                    <th scope="col" class="num">MtM</th>
+                    <th scope="col" class="num">Comp. spot</th>
+                    <th scope="col" class="num">Puntos fwd</th>
+                    <th scope="col" class="num">Delta</th>
+                    <th scope="col" class="num">DV01</th>
+                    <th scope="col" class="num">Theta 1d</th>
+                    <th scope="col" class="num">CVA</th>
+                    <th scope="col" class="num">DVA</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for l in result.lines %}
+                <tr {% if l.error %}class="row-error"{% endif %}>
+                    <td class="text-center">
+                        {% if l.error %}
+                        <span class="flag-icon" style="background:var(--danger-soft); color:var(--danger)"
+                              title="{{ l.error }}" aria-label="Error: {{ l.error }}">!</span>
+                        {% elif l.flags %}
+                        <span class="flag-icon" title="{% for f in l.flags %}{{ f }}{% if not forloop.last %} · {% endif %}{% endfor %}"
+                              aria-label="Avisos: {% for f in l.flags %}{{ f }}{% if not forloop.last %}; {% endif %}{% endfor %}">!</span>
+                        {% endif %}
+                    </td>
+                    <td class="mono">{{ l.folio|default:"—" }}</td>
+                    <td>{{ l.counterparty|default:"—" }}</td>
+                    <td class="muted">{{ l.cartera|default:"—" }}</td>
+                    <td><span class="pill {{ l.side|lower }}">{{ l.side }}</span></td>
+                    <td class="nowrap">{{ l.maturity_date }}</td>
+                    <td class="num">{{ l.days_to_mat }}</td>
+                    <td class="num">{{ l.year_fraction|formato_numero:6 }}</td>
+                    <td class="num">{{ l.notional|formato_numero:0 }}</td>
+                    <td class="num">{{ l.spot_inicio|formato_precio }}</td>
+                    <td class="num">{{ l.spot_val|formato_precio }}</td>
+                    <td class="num">{{ l.fwd_contract|formato_precio }}</td>
+                    <td class="num">{% if l.fwd_mkt %}{{ l.fwd_mkt|formato_numero:4 }}{% else %}—{% endif %}</td>
+                    <td class="num">{% if l.disc_rate %}{{ l.disc_rate|formato_tasa:4 }}{% else %}—{% endif %}</td>
+                    <td class="num mono">{% if l.disc_factor %}{{ l.disc_factor|formato_factor }}{% else %}—{% endif %}</td>
+                    <td class="num strong {{ l.mtm|color_mtm }}">{% if l.error %}—{% else %}{{ l.mtm|formato_clp }}{% endif %}</td>
+                    <td class="num {{ l.spot_component|color_mtm }}">{% if l.error %}—{% else %}{{ l.spot_component|formato_clp }}{% endif %}</td>
+                    <td class="num {{ l.fwd_points|color_mtm }}">{% if l.error %}—{% else %}{{ l.fwd_points|formato_clp }}{% endif %}</td>
+                    <td class="num">{{ l.delta|formato_numero:0 }}</td>
+                    <td class="num">{{ l.dv01|formato_numero:0 }}</td>
+                    <td class="num">{{ l.theta_1d|formato_numero:0 }}</td>
+                    <td class="num">{{ l.cva|formato_numero:0 }}</td>
+                    <td class="num">{{ l.dva|formato_numero:0 }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+            <tfoot>
+                <tr>
+                    <td colspan="15">Totales ({{ result.diagnostics.valued }} contrato{{ result.diagnostics.valued|pluralize:"s" }} válido{{ result.diagnostics.valued|pluralize:"s" }})</td>
+                    <td class="num {{ result.totals.total_mtm|color_mtm }}">{{ result.totals.total_mtm|formato_clp }}</td>
+                    <td class="num {{ result.totals.total_spot|color_mtm }}">{{ result.totals.total_spot|formato_clp }}</td>
+                    <td class="num {{ result.totals.total_fwdpoints|color_mtm }}">{{ result.totals.total_fwdpoints|formato_clp }}</td>
+                    <td class="num">{{ result.totals.total_delta|formato_numero:0 }}</td>
+                    <td class="num">{{ result.totals.total_dv01|formato_numero:0 }}</td>
+                    <td class="num">{{ result.totals.total_theta|formato_numero:0 }}</td>
+                    <td class="num">{{ result.totals.total_cva|formato_numero:0 }}</td>
+                    <td class="num">{{ result.totals.total_dva|formato_numero:0 }}</td>
+                </tr>
+            </tfoot>
+        </table>
+    </div>
+</div>
+
+<div class="grid cols-2" style="grid-template-columns: minmax(0,1fr) minmax(0,1fr)">
+    <div class="card flush" id="tabla-contraparte">
+        <div class="card-head"><h2>Resumen por contraparte</h2></div>
+        <div class="table-wrap">
+            <table class="dense">
+                <thead>
+                    <tr>
+                        <th scope="col">Contraparte</th>
+                        <th scope="col" class="num">Operaciones</th>
+                        <th scope="col" class="num">Nocional</th>
+                        <th scope="col" class="num">MtM</th>
+                        <th scope="col" class="num">CVA</th>
+                        <th scope="col" class="num">DVA</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for nombre, d in result.por_contraparte.items %}
+                    <tr data-cp="{{ nombre }}" data-mtm="{{ d.mtm|stringformat:'f' }}">
+                        <td><strong>{{ nombre }}</strong></td>
+                        <td class="num">{{ d.n }}</td>
+                        <td class="num">{{ d.notional|formato_numero:0 }}</td>
+                        <td class="num strong {{ d.mtm|color_mtm }}">{{ d.mtm|formato_clp }}</td>
+                        <td class="num">{{ d.cva|formato_numero:0 }}</td>
+                        <td class="num">{{ d.dva|formato_numero:0 }}</td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="6" class="muted text-center">Sin contrapartes con resultado válido.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="chart-card">
+        <h3>MtM por contraparte</h3>
+        <p class="sub">Resultado de esta corrida</p>
+        <div class="chart-box"><canvas id="chartResultCP" aria-label="MtM por contraparte" role="img"></canvas></div>
+    </div>
+</div>
+{% endif %}
+
+{% if sensibilidad %}
+<div class="card">
+    <div class="card-head">
+        <h2>Mapa de calor de sensibilidad</h2>
+        <span class="muted small">
+            MtM base {{ sensibilidad.base_mtm|formato_clp }} ·
+            rango {{ sensibilidad.min_mtm|formato_clp }} a {{ sensibilidad.max_mtm|formato_clp }}
+        </span>
+    </div>
+    <p class="muted small" style="margin-bottom:12px">
+        Filas: desplazamiento del spot. Columnas: desplazamiento de la curva forward. La celda con borde morado es el caso base (0 %, 0 %).
+    </p>
+    <div class="table-wrap" style="border:0">
+        <table class="heat" id="heatmap"
+               data-min="{{ sensibilidad.min_mtm|stringformat:'f' }}"
+               data-max="{{ sensibilidad.max_mtm|stringformat:'f' }}"
+               data-base="{{ sensibilidad.base_mtm|stringformat:'f' }}">
+            <caption class="hidden">MtM ante desplazamientos simultáneos de spot y curva forward</caption>
+            <thead>
+                <tr>
+                    <th class="corner" scope="col">Spot \ Curva</th>
+                    {% for cs in sensibilidad.curve_shifts %}
+                    <th scope="col">{{ cs|formato_numero:1 }} %</th>
+                    {% endfor %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for fila in sensibilidad.matrix %}
+                <tr>
+                    <th class="rowhead" scope="row">
+                        {{ fila.spot_pct|formato_numero:1 }} %
+                        <div class="tiny muted">{{ fila.spot_value|formato_precio }}</div>
+                    </th>
+                    {% for celda in fila.cells %}
+                    <td data-mtm="{{ celda.mtm|stringformat:'f' }}"
+                        {% if fila.spot_pct == 0 and celda.curve_pct == 0 %}class="base"{% endif %}
+                        title="Spot {{ fila.spot_pct|formato_numero:1 }} % · curva {{ celda.curve_pct|formato_numero:1 }} %">
+                        <span class="cell-main">{{ celda.mtm|formato_clp }}</span>
+                        {% if celda.spot_component is not None %}
+                        <span class="cell-sub">spot {{ celda.spot_component|formato_numero:0 }} · pts {{ celda.fwd_points|formato_numero:0 }}</span>
+                        {% endif %}
+                    </td>
+                    {% endfor %}
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <div class="heat-legend">
+        <span>Pérdida</span><span class="bar" aria-hidden="true"></span><span>Ganancia</span>
+        <span class="muted">· respecto del MtM base</span>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script src="{% static 'valorizador/js/valorizar.js' %}" defer></script>
+{% endblock %}

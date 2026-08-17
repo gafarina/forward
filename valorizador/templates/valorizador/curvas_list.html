@@ -1,0 +1,92 @@
+{% extends 'valorizador/base.html' %}
+{% load format_tags %}
+
+{% block title %}Curvas{% endblock %}
+
+{% block content %}
+<div class="page-head">
+    <div>
+        <h1>Conjuntos de curvas</h1>
+        <p class="sub">Cada conjunto es una fotografía de mercado: spot más curva forward y curva de descuento.</p>
+    </div>
+    <div class="actions">
+        <a href="{% url 'upload' %}" class="btn secondary">Cargar libro Excel</a>
+        <a href="{% url 'curvas_create' %}" class="btn">Nuevo conjunto</a>
+    </div>
+</div>
+
+<div class="card flush">
+    {% if conjuntos %}
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th scope="col">Etiqueta</th>
+                    <th scope="col">Fecha</th>
+                    <th scope="col" class="num">Spot USD/CLP</th>
+                    <th scope="col">Fuente</th>
+                    <th scope="col" class="num">Nodos</th>
+                    <th scope="col">Estado</th>
+                    <th scope="col" class="text-center">Acciones</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for c in conjuntos %}
+                <tr>
+                    <td><a href="{% url 'curvas_detail' c.pk %}"><strong>{{ c.label }}</strong></a></td>
+                    <td class="nowrap">{{ c.valuation_date|date:"d/m/Y" }}</td>
+                    <td class="num">{{ c.spot_usdclp|formato_precio }}</td>
+                    <td class="muted">{{ c.source }}</td>
+                    <td class="num">{{ c.n_puntos }}</td>
+                    <td>
+                        {% if c.is_active %}
+                        <span class="pill ok">Activo</span>
+                        {% else %}
+                        <span class="pill neutral">Inactivo</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div class="row" style="justify-content:center; gap:6px; flex-wrap:nowrap">
+                            <a href="{% url 'curvas_detail' c.pk %}" class="btn-icon" aria-label="Ver detalle de {{ c.label }}" title="Ver detalle">◉</a>
+                            <a href="{% url 'curvas_edit' c.pk %}" class="btn-icon" aria-label="Editar {{ c.label }}" title="Editar">✎</a>
+                            {% if not c.is_active %}
+                            <form method="post" action="{% url 'curvas_activate' c.pk %}" class="inline-form"
+                                  onsubmit="return confirm('¿Activar «{{ c.label|escapejs }}» como conjunto de curvas vigente? El conjunto activo actual quedará inactivo.');">
+                                {% csrf_token %}
+                                <button type="submit" class="btn-icon" aria-label="Activar {{ c.label }}" title="Activar">★</button>
+                            </form>
+                            {% endif %}
+                            <form method="post" action="{% url 'curvas_duplicate' c.pk %}" class="inline-form"
+                                  onsubmit="return confirm('¿Crear una copia de «{{ c.label|escapejs }}» con todos sus nodos?');">
+                                {% csrf_token %}
+                                <button type="submit" class="btn-icon" aria-label="Duplicar {{ c.label }}" title="Duplicar">⧉</button>
+                            </form>
+                            <form method="post" action="{% url 'curvas_delete' c.pk %}" class="inline-form"
+                                  onsubmit="return confirm('¿Eliminar «{{ c.label|escapejs }}» y todos sus nodos? Esta acción no se puede deshacer.');">
+                                {% csrf_token %}
+                                <button type="submit" class="btn-icon danger" aria-label="Eliminar {{ c.label }}" title="Eliminar">🗑</button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="empty">
+        <span class="ico" aria-hidden="true">◠</span>
+        <h3>No hay conjuntos de curvas</h3>
+        <p>Sin curvas no se puede valorizar. Carga los datos de ejemplo, sube un libro Excel o crea un conjunto a mano.</p>
+        <div class="row" style="justify-content:center">
+            <form method="post" action="{% url 'datos_ejemplo' %}">
+                {% csrf_token %}
+                <button type="submit" class="btn">Cargar datos de ejemplo</button>
+            </form>
+            <a href="{% url 'curvas_create' %}" class="btn secondary">Crear conjunto</a>
+            <a href="{% url 'upload' %}" class="btn secondary">Cargar libro Excel</a>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

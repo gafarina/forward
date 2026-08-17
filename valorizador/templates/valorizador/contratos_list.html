@@ -1,0 +1,134 @@
+{% extends 'valorizador/base.html' %}
+{% load format_tags %}
+
+{% block title %}Contratos{% endblock %}
+
+{% block content %}
+<div class="page-head">
+    <div>
+        <h1>Contratos forward</h1>
+        <p class="sub">
+            {{ contratos|length }} contrato{{ contratos|length|pluralize:"s" }}
+            {% if cartera_obj %} en la cartera «{{ cartera_obj.nombre }}»{% endif %}
+            {% if estado %} · estado {{ estado|lower }}{% endif %}
+        </p>
+    </div>
+    <div class="actions">
+        <a href="{% url 'contratos_export_csv' %}" class="btn secondary">Exportar CSV</a>
+        <a href="{% url 'contratos_import' %}" class="btn secondary">Importar</a>
+        <a href="{% url 'contrato_create' %}" class="btn">Nuevo contrato</a>
+    </div>
+</div>
+
+<div class="card">
+    <form method="get" class="filters" role="search">
+        <div class="field">
+            <label for="f-cartera">Cartera</label>
+            <select name="cartera" id="f-cartera" class="select">
+                <option value="">Todas</option>
+                {% for c in carteras %}
+                <option value="{{ c.pk }}" {% if cartera_obj and cartera_obj.pk == c.pk %}selected{% endif %}>{{ c.nombre }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="field">
+            <label for="f-estado">Estado</label>
+            <select name="estado" id="f-estado" class="select">
+                <option value="Vigente" {% if estado == 'Vigente' %}selected{% endif %}>Vigente</option>
+                <option value="Vencido" {% if estado == 'Vencido' %}selected{% endif %}>Vencido</option>
+                <option value="Liquidado" {% if estado == 'Liquidado' %}selected{% endif %}>Liquidado</option>
+                <option value="" {% if not estado %}selected{% endif %}>Todos</option>
+            </select>
+        </div>
+        <div class="field" style="flex:1; min-width:220px">
+            <label for="f-q">Buscar</label>
+            <input type="search" name="q" id="f-q" value="{{ q }}" placeholder="Contraparte o folio">
+        </div>
+        <button type="submit" class="btn">Filtrar</button>
+        <a href="{% url 'contratos_list' %}" class="btn ghost">Limpiar</a>
+    </form>
+</div>
+
+<div class="card flush">
+    {% if contratos %}
+    <div class="table-wrap">
+        <table class="dense">
+            <thead>
+                <tr>
+                    <th scope="col">Folio</th>
+                    <th scope="col">Contraparte</th>
+                    <th scope="col">Cartera</th>
+                    <th scope="col">Operación</th>
+                    <th scope="col">Moneda</th>
+                    <th scope="col" class="num">Nocional</th>
+                    <th scope="col" class="num">Precio fwd</th>
+                    <th scope="col" class="num">Spot inicio</th>
+                    <th scope="col">Inicio</th>
+                    <th scope="col">Vencimiento</th>
+                    <th scope="col" class="num">Días rest.</th>
+                    <th scope="col" class="text-center">Acciones</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% now "Y-m-d" as hoy %}
+                {% for c in contratos %}
+                <tr>
+                    <td class="mono">{{ c.folio|default:"—" }}</td>
+                    <td>{{ c.counterparty|default:"—" }}</td>
+                    <td class="muted">{{ c.cartera.nombre|default:"—" }}</td>
+                    <td><span class="pill {{ c.side|lower }}">{{ c.get_side_display }}</span></td>
+                    <td class="mono">{{ c.base_ccy }}/{{ c.quote_ccy }}</td>
+                    <td class="num">{{ c.notional|formato_numero:0 }}</td>
+                    <td class="num">{{ c.fwd_price|formato_precio }}</td>
+                    <td class="num">
+                        {% if c.spot_inicio %}{{ c.spot_inicio|formato_precio }}
+                        {% else %}<span class="muted" title="Sin este dato no se separa el resultado en componente spot y puntos forward">—</span>{% endif %}
+                    </td>
+                    <td class="nowrap muted">{{ c.start_date|date:"d/m/Y"|default:"—" }}</td>
+                    <td class="nowrap">{{ c.maturity_date|date:"d/m/Y" }}</td>
+                    <td class="num">
+                        {% with dias=c.maturity_date|timeuntil %}
+                        {% if c.maturity_date|date:"Y-m-d" < hoy %}
+                        <span class="neg" title="Vencido">vencido</span>
+                        {% else %}
+                        <span class="muted">{{ dias }}</span>
+                        {% endif %}
+                        {% endwith %}
+                    </td>
+                    <td>
+                        <div class="row" style="justify-content:center; gap:6px; flex-wrap:nowrap">
+                            <a href="{% url 'contrato_edit' c.pk %}" class="btn-icon"
+                               aria-label="Editar contrato {{ c.folio|default:c.pk }}" title="Editar">✎</a>
+                            <form method="post" action="{% url 'contrato_delete' c.pk %}" class="inline-form"
+                                  onsubmit="return confirm('¿Eliminar el contrato {{ c.folio|default:c.pk|escapejs }} de {{ c.counterparty|escapejs }}? Esta acción no se puede deshacer.');">
+                                {% csrf_token %}
+                                <button type="submit" class="btn-icon danger"
+                                        aria-label="Eliminar contrato {{ c.folio|default:c.pk }}" title="Eliminar">🗑</button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+            <tfoot>
+                <tr>
+                    <td colspan="5">Total ({{ contratos|length }} contrato{{ contratos|length|pluralize:"s" }})</td>
+                    <td class="num">{{ total_nocional|formato_numero:0 }}</td>
+                    <td colspan="6"></td>
+                </tr>
+            </tfoot>
+        </table>
+    </div>
+    {% else %}
+    <div class="empty">
+        <span class="ico" aria-hidden="true">≣</span>
+        <h3>No hay contratos con estos filtros</h3>
+        <p>Cambia los filtros, agrega un contrato o importa una planilla.</p>
+        <div class="row" style="justify-content:center">
+            <a href="{% url 'contrato_create' %}" class="btn">Nuevo contrato</a>
+            <a href="{% url 'contratos_import' %}" class="btn secondary">Importar planilla</a>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

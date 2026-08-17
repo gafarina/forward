@@ -1,0 +1,337 @@
+{% extends 'valorizador/base.html' %}
+{% load static format_tags humanize %}
+
+{% block title %}Panel{% endblock %}
+
+{% block content %}
+<div class="page-head">
+    <div>
+        <h1>Panel de control</h1>
+        <p class="sub">
+            {% if active_curves %}
+                Curvas activas: <strong>{{ active_curves.label }}</strong> · spot {{ active_curves.spot_usdclp|formato_precio }} · {{ active_curves.valuation_date|date:"d/m/Y" }}
+            {% else %}
+                No hay un conjunto de curvas activo.
+            {% endif %}
+        </p>
+    </div>
+    <div class="actions">
+        <form method="get" class="row" role="search">
+            <label class="hidden" for="cartera_id">Cartera</label>
+            <select name="cartera_id" id="cartera_id" class="select" data-autosubmit>
+                <option value="">Todas las carteras</option>
+                {% for c in carteras %}
+                <option value="{{ c.pk }}" {% if selected_cartera == c.pk %}selected{% endif %}>{{ c.nombre }}</option>
+                {% endfor %}
+            </select>
+            <noscript><button type="submit" class="btn secondary sm">Filtrar</button></noscript>
+        </form>
+        <a href="{% url 'valorizar' %}" class="btn">Valorizar cartera</a>
+    </div>
+</div>
+
+<div class="grid cols-4">
+    <div class="kpi accent">
+        <span class="label">Conjuntos de curvas</span>
+        <span class="value">{{ num_conjuntos|formato_numero:0 }}</span>
+        <span class="hint"><a href="{% url 'curvas_list' %}">Administrar curvas</a></span>
+    </div>
+    <div class="kpi accent">
+        <span class="label">Contratos vigentes</span>
+        <span class="value">{{ num_contratos|formato_numero:0 }}</span>
+        <span class="hint">{{ contratos_compra|formato_numero:0 }} compra · {{ contratos_venta|formato_numero:0 }} venta</span>
+    </div>
+    <div class="kpi accent">
+        <span class="label">Nocional total</span>
+        <span class="value sm">{{ total_nocional|formato_numero:0 }}</span>
+        <span class="hint">Moneda base de los contratos</span>
+    </div>
+    <div class="kpi accent">
+        <span class="label">Valorizaciones guardadas</span>
+        <span class="value">{{ num_valorizaciones|formato_numero:0 }}</span>
+        <span class="hint">
+            {% if ultima_val %}
+                Última: {{ ultima_val.valuation_date|date:"d/m/Y" }} ·
+                <span class="{{ ultima_val.total_mtm|color_mtm }}">{{ ultima_val.total_mtm|formato_clp }}</span>
+            {% else %}
+                Sin valorizaciones aún
+            {% endif %}
+        </span>
+    </div>
+</div>
+
+{% if num_contratos == 0 and num_conjuntos == 0 %}
+<div class="card">
+    <div class="empty">
+        <span class="ico" aria-hidden="true">◍</span>
+        <h3>Todavía no hay datos cargados</h3>
+        <p>
+            Si sólo quieres ver cómo funciona, carga los datos de ejemplo: dos curvas
+            y tres forwards del caso de referencia al 31-05-2026, listos para valorizar.
+        </p>
+        <div class="row" style="justify-content:center">
+            <form method="post" action="{% url 'datos_ejemplo' %}">
+                {% csrf_token %}
+                <button type="submit" class="btn">Cargar datos de ejemplo</button>
+            </form>
+            <a href="{% url 'upload' %}" class="btn secondary">Cargar libro Excel</a>
+            <a href="{% url 'curvas_create' %}" class="btn secondary">Crear curvas manualmente</a>
+            <a href="{% url 'contrato_create' %}" class="btn secondary">Agregar contrato</a>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<div class="grid cols-2">
+    <div class="chart-card">
+        <h3>MtM por contraparte</h3>
+        <p class="sub">Última valorización guardada{% if ultima_val %} · {{ ultima_val.label|default:"sin etiqueta" }}{% endif %}</p>
+        <div class="chart-box">
+            <canvas id="chartContraparte" aria-label="MtM por contraparte" role="img"></canvas>
+        </div>
+        <div class="empty hidden" id="emptyContraparte">
+            <span class="ico" aria-hidden="true">▤</span>
+            <p>Sin valorizaciones guardadas para esta selección.</p>
+            <a href="{% url 'valorizar' %}" class="btn sm">Valorizar ahora</a>
+        </div>
+    </div>
+
+    <div class="chart-card">
+        <h3>Perfil de vencimientos</h3>
+        <p class="sub">Nocional por mes de vencimiento de los contratos vigentes</p>
+        <div class="chart-box">
+            <canvas id="chartVencimientos" aria-label="Nocional por mes de vencimiento" role="img"></canvas>
+        </div>
+        <div class="empty hidden" id="emptyVencimientos">
+            <span class="ico" aria-hidden="true">≣</span>
+            <p>No hay contratos vigentes con esta selección.</p>
+            <a href="{% url 'contrato_create' %}" class="btn sm">Agregar contrato</a>
+        </div>
+    </div>
+
+    <div class="chart-card">
+        <h3>Curva forward USD/CLP</h3>
+        <p class="sub">Outright por plazo (días), conjunto activo</p>
+        <div class="chart-box">
+            <canvas id="chartForward" aria-label="Curva forward USD/CLP" role="img"></canvas>
+        </div>
+        <div class="empty hidden" id="emptyForward">
+            <span class="ico" aria-hidden="true">◠</span>
+            <p>No hay una curva forward activa.</p>
+            <a href="{% url 'curvas_list' %}" class="btn sm">Activar un conjunto</a>
+        </div>
+    </div>
+
+    <div class="chart-card">
+        <h3>Curva de descuento CLP</h3>
+        <p class="sub">Tasa cero por plazo (días), conjunto activo</p>
+        <div class="chart-box">
+            <canvas id="chartDescuento" aria-label="Curva de descuento CLP" role="img"></canvas>
+        </div>
+        <div class="empty hidden" id="emptyDescuento">
+            <span class="ico" aria-hidden="true">◡</span>
+            <p>No hay una curva de descuento activa.</p>
+            <a href="{% url 'curvas_create' %}" class="btn sm">Cargar curva</a>
+        </div>
+    </div>
+</div>
+
+<div class="card flush">
+    <div class="card-head">
+        <h2>Próximos vencimientos</h2>
+        <a href="{% url 'contratos_list' %}" class="btn ghost sm">Ver todos los contratos</a>
+    </div>
+    {% if proximos_vencimientos %}
+    <div class="table-wrap">
+        <table class="dense">
+            <thead>
+                <tr>
+                    <th scope="col">Folio</th>
+                    <th scope="col">Contraparte</th>
+                    <th scope="col">Cartera</th>
+                    <th scope="col">Operación</th>
+                    <th scope="col" class="num">Nocional</th>
+                    <th scope="col" class="num">Precio fwd</th>
+                    <th scope="col">Vencimiento</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for c in proximos_vencimientos %}
+                <tr>
+                    <td class="mono">{{ c.folio|default:"—" }}</td>
+                    <td>{{ c.counterparty|default:"—" }}</td>
+                    <td class="muted">{{ c.cartera.nombre|default:"—" }}</td>
+                    <td><span class="pill {{ c.side|lower }}">{{ c.get_side_display }}</span></td>
+                    <td class="num">{{ c.notional|formato_numero:0 }} {{ c.base_ccy }}</td>
+                    <td class="num">{{ c.fwd_price|formato_precio }}</td>
+                    <td class="nowrap">{{ c.maturity_date|date:"d/m/Y" }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="empty">
+        <span class="ico" aria-hidden="true">◷</span>
+        <h3>Sin vencimientos próximos</h3>
+        <p>No hay contratos vigentes para la selección actual.</p>
+        <a href="{% url 'contrato_create' %}" class="btn">Agregar un contrato</a>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+    var cpLabels = {{ chart_cp_labels|safe }};
+    var cpData   = {{ chart_cp_data|safe }};
+    var fwdDias  = {{ chart_fwd_dias|safe }};
+    var fwdTasas = {{ chart_fwd_tasas|safe }};
+    var descDias = {{ chart_desc_dias|safe }};
+    var descTasas= {{ chart_desc_tasas|safe }};
+    var vencLbl  = {{ chart_venc_labels|safe }};
+    var vencData = {{ chart_venc_data|safe }};
+
+    function vacio(idCanvas, idEmpty) {
+        var c = document.getElementById(idCanvas);
+        var e = document.getElementById(idEmpty);
+        if (c) c.closest('.chart-box').classList.add('hidden');
+        if (e) e.classList.remove('hidden');
+    }
+
+    var MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+    function mes(clave) {
+        var p = String(clave).split('-');
+        if (p.length !== 2) return clave;
+        return MESES[parseInt(p[1], 10) - 1] + ' ' + p[0];
+    }
+
+    // 1. MtM por contraparte
+    if (cpLabels.length) {
+        new Chart(document.getElementById('chartContraparte'), {
+            type: 'bar',
+            data: {
+                labels: cpLabels,
+                datasets: [{
+                    label: 'MtM (CLP)',
+                    data: cpData,
+                    backgroundColor: cpData.map(function (v) {
+                        return v >= 0 ? 'rgba(16,185,129,.75)' : 'rgba(206,44,44,.75)';
+                    }),
+                    borderColor: cpData.map(function (v) {
+                        return v >= 0 ? App.Tema.success : App.Tema.danger;
+                    }),
+                    borderWidth: 1,
+                    borderRadius: 4
+                }]
+            },
+            options: App.chartOpts({
+                plugins: {
+                    tooltip: {
+                        callbacks: {
+                            label: function (ctx) { return 'MtM: ' + App.clp(ctx.parsed.y); }
+                        }
+                    }
+                }
+            })
+        });
+    } else { vacio('chartContraparte', 'emptyContraparte'); }
+
+    // 2. Perfil de vencimientos
+    if (vencLbl.length) {
+        new Chart(document.getElementById('chartVencimientos'), {
+            type: 'bar',
+            data: {
+                labels: vencLbl.map(mes),
+                datasets: [{
+                    label: 'Nocional',
+                    data: vencData,
+                    backgroundColor: 'rgba(79,45,127,.65)',
+                    borderColor: App.Tema.accent,
+                    borderWidth: 1,
+                    borderRadius: 4
+                }]
+            },
+            options: App.chartOpts({
+                plugins: {
+                    tooltip: {
+                        callbacks: {
+                            label: function (ctx) { return 'Nocional: ' + App.num(ctx.parsed.y, 0); }
+                        }
+                    }
+                }
+            })
+        });
+    } else { vacio('chartVencimientos', 'emptyVencimientos'); }
+
+    // 3. Curva forward
+    if (fwdDias.length) {
+        new Chart(document.getElementById('chartForward'), {
+            type: 'line',
+            data: {
+                labels: fwdDias,
+                datasets: [{
+                    label: 'Forward outright',
+                    data: fwdTasas,
+                    borderColor: App.Tema.accent,
+                    backgroundColor: 'rgba(79,45,127,.12)',
+                    fill: true,
+                    tension: .25,
+                    pointRadius: 3,
+                    pointBackgroundColor: App.Tema.accent
+                }]
+            },
+            options: App.chartOpts({
+                scales: {
+                    x: { title: { display: true, text: 'Plazo (días)', color: App.Tema.tick, font: { size: 10 } } },
+                    y: { ticks: { callback: function (v) { return App.num(v, 2); } } }
+                },
+                plugins: {
+                    tooltip: {
+                        callbacks: {
+                            title: function (i) { return i[0].label + ' días'; },
+                            label: function (ctx) { return 'Outright: ' + App.num(ctx.parsed.y, 4); }
+                        }
+                    }
+                }
+            })
+        });
+    } else { vacio('chartForward', 'emptyForward'); }
+
+    // 4. Curva de descuento
+    if (descDias.length) {
+        new Chart(document.getElementById('chartDescuento'), {
+            type: 'line',
+            data: {
+                labels: descDias,
+                datasets: [{
+                    label: 'Tasa cero (%)',
+                    data: descTasas,
+                    borderColor: App.Tema.info,
+                    backgroundColor: 'rgba(0,164,179,.12)',
+                    fill: true,
+                    tension: .25,
+                    pointRadius: 3,
+                    pointBackgroundColor: App.Tema.info
+                }]
+            },
+            options: App.chartOpts({
+                scales: {
+                    x: { title: { display: true, text: 'Plazo (días)', color: App.Tema.tick, font: { size: 10 } } },
+                    y: { ticks: { callback: function (v) { return App.num(v, 2) + '%'; } } }
+                },
+                plugins: {
+                    tooltip: {
+                        callbacks: {
+                            title: function (i) { return i[0].label + ' días'; },
+                            label: function (ctx) { return 'Tasa: ' + App.num(ctx.parsed.y, 4) + '%'; }
+                        }
+                    }
+                }
+            })
+        });
+    } else { vacio('chartDescuento', 'emptyDescuento'); }
+})();
+</script>
+{% endblock %}

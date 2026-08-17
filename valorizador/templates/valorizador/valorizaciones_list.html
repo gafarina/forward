@@ -1,0 +1,72 @@
+{% extends 'valorizador/base.html' %}
+{% load format_tags %}
+
+{% block title %}Valorizaciones{% endblock %}
+
+{% block content %}
+<div class="page-head">
+    <div>
+        <h1>Valorizaciones guardadas</h1>
+        <p class="sub">Historial de corridas con su MtM, sensibilidades y configuración usada.</p>
+    </div>
+    <div class="actions">
+        <a href="{% url 'valorizar' %}" class="btn">Nueva valorización</a>
+    </div>
+</div>
+
+<div class="card flush">
+    {% if valorizaciones %}
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th scope="col">Etiqueta</th>
+                    <th scope="col">Fecha valorización</th>
+                    <th scope="col" class="num">Spot</th>
+                    <th scope="col" class="num">Contratos</th>
+                    <th scope="col" class="num">MtM total</th>
+                    <th scope="col" class="num">MtM ajustado</th>
+                    <th scope="col" class="num">Delta</th>
+                    <th scope="col" class="num">DV01</th>
+                    <th scope="col">Guardada</th>
+                    <th scope="col" class="text-center">Acciones</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for v in valorizaciones %}
+                <tr>
+                    <td><a href="{% url 'valorizacion_detail' v.pk %}"><strong>{{ v.label|default:"Sin etiqueta" }}</strong></a></td>
+                    <td class="nowrap">{{ v.valuation_date|date:"d/m/Y" }}</td>
+                    <td class="num">{{ v.spot|formato_precio }}</td>
+                    <td class="num">{{ v.num_contracts }}</td>
+                    <td class="num strong {{ v.total_mtm|color_mtm }}">{{ v.total_mtm|formato_clp }}</td>
+                    <td class="num {{ v.total_mtm_ajustado|color_mtm }}">{{ v.total_mtm_ajustado|formato_clp }}</td>
+                    <td class="num">{{ v.total_delta|formato_numero:0 }}</td>
+                    <td class="num">{{ v.total_dv01|formato_numero:0 }}</td>
+                    <td class="muted nowrap">{{ v.created_at|date:"d/m/Y H:i" }}</td>
+                    <td>
+                        <div class="row" style="justify-content:center; gap:6px; flex-wrap:nowrap">
+                            <a href="{% url 'valorizacion_detail' v.pk %}" class="btn-icon" aria-label="Ver detalle" title="Ver detalle">◉</a>
+                            <a href="{% url 'valorizacion_export_csv' v.pk %}" class="btn-icon" aria-label="Descargar CSV" title="Descargar CSV">↓</a>
+                            <form method="post" action="{% url 'valorizacion_delete' v.pk %}" class="inline-form"
+                                  onsubmit="return confirm('¿Eliminar la valorización «{{ v.label|default:'sin etiqueta'|escapejs }}» del {{ v.valuation_date }}? Se borran también sus líneas de detalle.');">
+                                {% csrf_token %}
+                                <button type="submit" class="btn-icon danger" aria-label="Eliminar valorización" title="Eliminar">🗑</button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="empty">
+        <span class="ico" aria-hidden="true">▤</span>
+        <h3>Todavía no guardas ninguna valorización</h3>
+        <p>Corre una valorización y usa el botón «Guardar valorización» para dejarla en el historial.</p>
+        <a href="{% url 'valorizar' %}" class="btn">Ir a valorizar</a>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

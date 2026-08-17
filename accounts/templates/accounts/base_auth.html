@@ -1,0 +1,38 @@
+{% load static %}<!DOCTYPE html>
+<html lang="es-CL">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light dark">
+    <title>{% block title %}Acceso{% endblock %} · Valorizador de Forwards</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{% static 'valorizador/css/style.css' %}">
+    <script src="{% static 'valorizador/js/app.js' %}" defer></script>
+</head>
+<body class="auth-body">
+<main class="auth-card">
+    <div class="auth-brand">
+        <span class="mark" aria-hidden="true">₣</span>
+        <span>
+            <strong>Valorizador de Forwards</strong>
+            <span>v2 · USD/CLP</span>
+        </span>
+    </div>
+
+    {% if messages %}
+    <div class="messages" role="status" aria-live="polite">
+        {% for message in messages %}
+        <div class="alert {{ message.tags|default:'info' }}">
+            <span class="txt">{{ message }}</span>
+            <button type="button" class="close" data-dismiss aria-label="Cerrar aviso">&times;</button>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    {% block content %}{% endblock %}
+</main>
+</body>
+</html>

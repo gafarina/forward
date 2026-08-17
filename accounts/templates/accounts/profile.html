@@ -1,0 +1,75 @@
+{% extends 'valorizador/base.html' %}
+{% load format_tags %}
+
+{% block title %}Mi perfil{% endblock %}
+
+{% block content %}
+<div class="page-head">
+    <div>
+        <h1>Mi perfil</h1>
+        <p class="sub">Datos de tu cuenta y resumen de lo que tienes cargado.</p>
+    </div>
+    <div class="actions">
+        <a href="{% url 'accounts:password_change' %}" class="btn secondary">Cambiar contraseña</a>
+        <form method="post" action="{% url 'accounts:logout' %}" class="inline-form"
+              onsubmit="return confirm('¿Cerrar la sesión?');">
+            {% csrf_token %}
+            <button type="submit" class="btn">Cerrar sesión</button>
+        </form>
+    </div>
+</div>
+
+<div class="grid cols-2" style="grid-template-columns: minmax(0,1fr) minmax(0,1fr); align-items:start">
+    <div class="card">
+        <h2>Cuenta</h2>
+        <div class="table-wrap" style="border:0">
+            <table class="dense">
+                <tbody>
+                    <tr><td class="muted">Usuario</td><td><strong>{{ user.username }}</strong></td></tr>
+                    <tr><td class="muted">Correo</td><td>{{ user.email|default:"— sin correo registrado —" }}</td></tr>
+                    <tr><td class="muted">Nombre</td><td>{{ user.get_full_name|default:"—" }}</td></tr>
+                    <tr><td class="muted">Cuenta creada</td><td>{{ user.date_joined|date:"d/m/Y H:i" }}</td></tr>
+                    <tr><td class="muted">Último acceso</td><td>{{ user.last_login|date:"d/m/Y H:i"|default:"—" }}</td></tr>
+                    <tr>
+                        <td class="muted">Permisos</td>
+                        <td>{% if user.is_staff %}<span class="pill info">Staff</span>{% else %}<span class="pill neutral">Usuario</span>{% endif %}</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <p class="muted tiny mt">
+            La contraseña debe tener al menos 10 caracteres.
+            <a href="{% url 'accounts:password_change' %}">Cambiarla ahora</a>.
+        </p>
+    </div>
+
+    <div>
+        <div class="grid cols-3" style="margin-bottom:16px">
+            <div class="kpi accent">
+                <span class="label">Contratos</span>
+                <span class="value">{{ n_contratos }}</span>
+                <span class="hint"><a href="{% url 'contratos_list' %}">Ver contratos</a></span>
+            </div>
+            <div class="kpi accent">
+                <span class="label">Carteras</span>
+                <span class="value">{{ n_carteras }}</span>
+                <span class="hint"><a href="{% url 'carteras_list' %}">Ver carteras</a></span>
+            </div>
+            <div class="kpi accent">
+                <span class="label">Valorizaciones</span>
+                <span class="value">{{ n_valorizaciones }}</span>
+                <span class="hint"><a href="{% url 'valorizaciones_list' %}">Ver historial</a></span>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>Accesos rápidos</h2>
+            <div class="row">
+                <a href="{% url 'valorizar' %}" class="btn">Valorizar</a>
+                <a href="{% url 'curvas_create' %}" class="btn secondary">Nuevas curvas</a>
+                <a href="{% url 'upload' %}" class="btn secondary">Cargar libro</a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

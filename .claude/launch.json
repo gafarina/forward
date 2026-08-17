@@ -1,0 +1,24 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "django",
+      "runtimeExecutable": "powershell",
+      "runtimeArgs": [
+        "-NoProfile",
+        "-ExecutionPolicy", "Bypass",
+        "-File", "scripts/run_local.ps1",
+        "-Puerto", "8000"
+      ],
+      "port": 8000,
+      "url": "http://127.0.0.1:8000"
+    },
+    {
+      "name": "informe",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "8010", "--directory", "docs"],
+      "port": 8010,
+      "url": "http://127.0.0.1:8010"
+    }
+  ]
+}
